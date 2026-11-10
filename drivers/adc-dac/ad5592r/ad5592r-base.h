@@ -15,7 +15,6 @@
 #include "capi_time.h"
 #include "capi_spi.h"
 #include "capi_i2c.h"
-#include "capi_gpio.h"
 #include "no_os_util.h"
 #include "capi_alloc.h"
 #include <stdbool.h>
@@ -103,14 +102,12 @@ struct ad5592r_init_param {
 	bool int_ref;
 	uint32_t external_vref; /* valid only if int_ref = true */
 	/* SPI device (AD5592R). Its controller must already be initialized,
-	 * and it must outlive the AD5592R descriptor. */
+	 * and it must outlive the AD5592R descriptor. The platform drives its
+	 * chip-select. */
 	struct capi_spi_device *spi_dev;
 	/* I2C device (AD5593R). Its controller must already be initialized,
 	 * and it must outlive the AD5593R descriptor. */
 	struct capi_i2c_device *i2c_dev;
-	/* Optional software slave select (AD5592R). Its port must already be
-	 * initialized. */
-	struct capi_gpio_pin *ss;
 	uint8_t channel_modes[8];
 	uint8_t channel_offstate[8];
 	enum ad559xr_range adc_range;
@@ -123,7 +120,6 @@ struct ad5592r_dev {
 	const struct ad5592r_rw_ops *ops;
 	struct capi_i2c_device *i2c;
 	struct capi_spi_device *spi;
-	struct capi_gpio_pin *ss;
 	uint16_t spi_msg;
 	uint8_t num_channels;
 	uint16_t cached_dac[8];

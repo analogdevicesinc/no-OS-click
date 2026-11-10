@@ -40,8 +40,6 @@ static int ad5592r_write_and_read_spi(struct ad5592r_dev *dev,
 		.tx_size = bytes_number,
 		.rx_size = bytes_number,
 	};
-	int err;
-	int spi_err;
 
 	if (!dev)
 		return -ENODEV;
@@ -49,21 +47,7 @@ static int ad5592r_write_and_read_spi(struct ad5592r_dev *dev,
 	if (!data)
 		return -EINVAL;
 
-	if (dev->ss) {
-		err = capi_gpio_pin_set_raw_value(dev->ss, CAPI_GPIO_LOW);
-		if (err)
-			return err;
-	}
-
-	spi_err = capi_spi_transceive(dev->spi, &xfer);
-
-	if (dev->ss) {
-		err = capi_gpio_pin_set_raw_value(dev->ss, CAPI_GPIO_HIGH);
-		if (err)
-			return err;
-	}
-
-	return spi_err;
+	return capi_spi_transceive(dev->spi, &xfer);
 }
 
 /**
@@ -336,26 +320,13 @@ int32_t ad5592r_init(struct ad5592r_dev **device,
 		goto err_free_device;
 	dev->spi = init_param->spi_dev;
 
-	/* initialize the software slave select (if any) */
-	if (init_param->ss) {
-		dev->ss = init_param->ss;
-
-		ret = capi_gpio_pin_set_raw_value(dev->ss, CAPI_GPIO_HIGH);
-		if (ret)
-			goto err_remove_spi;
-
-		ret = capi_gpio_pin_set_direction(dev->ss, CAPI_GPIO_OUTPUT);
-		if (ret)
-			goto err_remove_spi_ss;
-	}
-
 	dev->ops = &ad5592r_rw_ops;
 	dev->ldac_mode = 0;
 	dev->num_channels = NUM_OF_CHANNELS;
 
 	ret = ad5592r_software_reset(dev);
 	if (ret < 0)
-		goto err_remove_spi_ss;
+		goto err_remove_spi;
 
 	for (i = 0; i < NUM_OF_CHANNELS; i++) {
 		dev->channel_modes[i] = init_param->channel_modes[i];
@@ -364,41 +335,39 @@ int32_t ad5592r_init(struct ad5592r_dev **device,
 
 	ret = ad5592r_set_adc_range(dev, init_param->adc_range);
 	if (ret < 0)
-		goto err_remove_spi_ss;
+		goto err_remove_spi;
 
 	ret = ad5592r_set_dac_range(dev, init_param->dac_range);
 	if (ret < 0)
-		goto err_remove_spi_ss;
+		goto err_remove_spi;
 
 	ret = ad5592r_set_adc_buffer(dev, init_param->adc_buf);
 	if (ret < 0)
-		goto err_remove_spi_ss;
+		goto err_remove_spi;
 
 	ret = ad5592r_set_channel_modes(dev);
 	if (ret < 0)
-		goto err_remove_spi_ss;
+		goto err_remove_spi;
 
 	if (init_param->int_ref)
 		ret = ad5592r_set_int_ref(dev, true);
 	else
 		ret = ad5592r_set_ext_ref(dev, init_param->external_vref);
 	if (ret < 0)
-		goto err_remove_spi_ss;
+		goto err_remove_spi;
 
 	for (i = 0; i < NUM_OF_CHANNELS; i++) {
 		ret = ad5592r_power_down(dev, i, init_param->power_down[i]);
 		if (ret < 0)
-			goto err_remove_spi_ss;
+			goto err_remove_spi;
 	}
 
 	*device = dev;
 
 	return 0;
 
-err_remove_spi_ss:
 err_remove_spi:
-	/* The SPI device, the slave select and their controllers belong to
-	 * the caller. */
+	/* The SPI device and its controller belong to the caller. */
 err_free_device:
 	capi_free(dev);
 	return ret;
@@ -423,8 +392,7 @@ int32_t ad5592r_remove(struct ad5592r_dev *dev)
 	if (err)
 		return err;
 
-	/* The SPI device, the slave select and their controllers belong to
-	 * the caller. */
+	/* The SPI device and its controller belong to the caller. */
 
 	/* finally we can remove our descriptor object */
 	capi_free(dev);
