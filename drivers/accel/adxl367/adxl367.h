@@ -423,8 +423,6 @@ struct adxl367_dev {
 	struct capi_spi_device		*spi_dev;
 	/** I2C device, owned by the caller */
 	struct capi_i2c_device		*i2c_dev;
-	/** Depending on ASEL pin, can be 0x53 or 0x1D. Only for I2C Comm. */
-	uint8_t i2c_slave_address;
 	/** Measurement Range: */
 	enum adxl367_range		range;
 	enum adxl367_op_mode 		op_mode;
@@ -452,10 +450,9 @@ struct adxl367_init_param {
 	 *  initialized, and it must outlive the ADXL367 descriptor. */
 	struct capi_spi_device		*spi_dev;
 	/** I2C device, for ADXL367_I2C_COMM. Its controller must already be
-	 *  initialized, and it must outlive the ADXL367 descriptor. */
+	 *  initialized, and it must outlive the ADXL367 descriptor. Its address
+	 *  depends on the ASEL pin: 0x53 or 0x1D. */
 	struct capi_i2c_device		*i2c_dev;
-	/** Depending on ASEL pin, can be 0x53 or 0x1D. Only for I2C Comm. */
-	uint8_t 			i2c_slave_address;
 };
 
 /* Initializes the device. */

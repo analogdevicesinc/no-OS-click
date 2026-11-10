@@ -55,7 +55,6 @@ int adxl367_init(struct adxl367_dev **device,
 		if (status)
 			goto comm_err;
 		dev->i2c_dev = init_param.i2c_dev;
-		dev->i2c_slave_address = init_param.i2c_slave_address;
 	} else {
 		/* Communication type not defined.*/
 		goto comm_err;
@@ -247,11 +246,12 @@ int adxl367_set_register_value(struct adxl367_dev *dev,
 		return capi_spi_transceive(dev->spi_dev, &xfer);
 	} else {
 		struct capi_i2c_transfer xfer = {
-			.buf = buffer,
-			.len = sizeof(buffer),
+			.sub_address = &register_address,
+			.sub_address_len = 1,
+			.buf = &register_value,
+			.len = 1,
 		};
 
-		buffer[0] = dev->i2c_slave_address + ADXL367_I2C_WRITE;
 		return capi_i2c_transmit(dev->i2c_dev, &xfer);
 	}
 
@@ -296,25 +296,17 @@ int adxl367_get_register_value(struct adxl367_dev *dev,
 		for (index = 0; index < register_nb; index++)
 			read_data[index] = buffer[index + 2];
 	} else {
-		struct capi_i2c_transfer write_xfer = {
-			.buf = buffer,
-			.len = 2,
-			.no_stop = true,
-		};
-		struct capi_i2c_transfer read_xfer = {
-			.buf = buffer,
-			.len = register_nb + 1,
+		struct capi_i2c_transfer xfer = {
+			.repeated_start = true,
+			.sub_address = &register_address,
+			.sub_address_len = 1,
+			.buf = read_data,
+			.len = register_nb,
 		};
 
-		buffer[0] = dev->i2c_slave_address + ADXL367_I2C_READ;
-		ret = capi_i2c_transmit(dev->i2c_dev, &write_xfer);
+		ret = capi_i2c_receive(dev->i2c_dev, &xfer);
 		if (ret)
 			return ret;
-		ret = capi_i2c_receive(dev->i2c_dev, &read_xfer);
-		if (ret)
-			return ret;
-		for (index = 0; index < register_nb; index++)
-			read_data[index] = buffer[index + 1];
 	}
 
 	return 0;
@@ -348,29 +340,24 @@ static int adxl367_get_fifo_value(struct adxl367_dev *dev,
 		ret = capi_spi_transceive(dev->spi_dev, &xfer);
 		if (ret)
 			return ret;
+
+		/* Drop the byte received while the command was sent. */
+		for (index = 0; index < bytes_nb; index++)
+			dev->fifo_buffer[index] = dev->fifo_buffer[index + 1];
 	} else {
-		struct capi_i2c_transfer write_xfer = {
+		uint8_t fifo_reg = ADXL367_REG_I2C_FIFO_DATA;
+		struct capi_i2c_transfer xfer = {
+			.repeated_start = true,
+			.sub_address = &fifo_reg,
+			.sub_address_len = 1,
 			.buf = dev->fifo_buffer,
-			.len = 2,
-			.no_stop = true,
-		};
-		struct capi_i2c_transfer read_xfer = {
-			.buf = dev->fifo_buffer,
-			.len = bytes_nb + 1,
+			.len = bytes_nb,
 		};
 
-		dev->fifo_buffer[0] = dev->i2c_slave_address + ADXL367_I2C_READ;
-		dev->fifo_buffer[1] = ADXL367_REG_I2C_FIFO_DATA;
-		ret = capi_i2c_transmit(dev->i2c_dev, &write_xfer);
-		if (ret)
-			return ret;
-		ret = capi_i2c_receive(dev->i2c_dev, &read_xfer);
+		ret = capi_i2c_receive(dev->i2c_dev, &xfer);
 		if (ret)
 			return ret;
 	}
-
-	for (index = 0; index < bytes_nb; index++)
-		dev->fifo_buffer[index] = dev->fifo_buffer[index + 1];
 
 	return 0;
 }
