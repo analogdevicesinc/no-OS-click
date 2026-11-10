@@ -159,12 +159,15 @@ int32_t ad5592r_read_adc(struct ad5592r_dev *dev, uint8_t chan,
 int32_t ad5592r_enable_busy(struct ad5592r_dev *dev, bool enable)
 {
 	uint16_t temp_reg_val = 0;
-
-	dev->channel_modes[7] = CH_MODE_GPO;
-	ad5592r_set_channel_modes(dev);
+	int32_t ret;
 
 	if (!dev)
 		return -1;
+
+	dev->channel_modes[7] = CH_MODE_GPO;
+	ret = ad5592r_set_channel_modes(dev);
+	if (ret < 0)
+		return ret;
 
 	temp_reg_val = enable ? AD5592R_REG_GPIO_OUT_EN_ADC_NOT_BUSY : 0;
 
