@@ -34,6 +34,10 @@ int32_t ad5593r_write_dac(struct ad5592r_dev *dev, uint8_t chan,
 			  uint16_t value)
 {
 	uint8_t data[3];
+	struct capi_i2c_transfer wr = {
+		.buf = data,
+		.len = sizeof(data),
+	};
 	int ret;
 
 	if (!dev)
@@ -43,7 +47,7 @@ int32_t ad5593r_write_dac(struct ad5592r_dev *dev, uint8_t chan,
 	data[1] = (value >> 8) & 0xF ;
 	data[2] = value & 0xFF;
 
-	ret = no_os_i2c_write(dev->i2c, data, sizeof(data), AD5593R_STOP_BIT);
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 	if (ret < 0)
 		return ret;
 
@@ -65,6 +69,13 @@ int32_t ad5593r_read_adc(struct ad5592r_dev *dev, uint8_t chan,
 {
 	int32_t ret;
 	uint8_t data[3];
+	struct capi_i2c_transfer wr = {
+		.buf = data,
+	};
+	struct capi_i2c_transfer rd = {
+		.buf = data,
+		.len = 2,
+	};
 	uint16_t temp;
 
 	if (!dev)
@@ -76,16 +87,18 @@ int32_t ad5593r_read_adc(struct ad5592r_dev *dev, uint8_t chan,
 	data[1] = temp >> 8;
 	data[2] = temp & 0xFF;
 
-	ret = no_os_i2c_write(dev->i2c, data, sizeof(data), AD5593R_STOP_BIT);
+	wr.len = sizeof(data);
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 	if (ret < 0)
 		return ret;
 
 	data[0] = AD5593R_MODE_ADC_READBACK;
-	ret = no_os_i2c_write(dev->i2c, data, 1, AD5593R_STOP_BIT);
+	wr.len = 1;
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 	if (ret < 0)
 		return ret;
 
-	ret = no_os_i2c_read(dev->i2c, data, 2, AD5593R_STOP_BIT);
+	ret = capi_i2c_receive(dev->i2c, &rd);
 	if (ret < 0)
 		return ret;
 
@@ -106,6 +119,12 @@ int32_t ad5593r_multi_read_adc(struct ad5592r_dev *dev, uint16_t chans,
 			       uint16_t *values)
 {
 	uint8_t data[AD5593R_ADC_VALUES_BUFF_SIZE], i;
+	struct capi_i2c_transfer wr = {
+		.buf = data,
+	};
+	struct capi_i2c_transfer rd = {
+		.buf = data,
+	};
 	int32_t ret;
 	uint8_t samples;
 
@@ -118,16 +137,20 @@ int32_t ad5593r_multi_read_adc(struct ad5592r_dev *dev, uint16_t chans,
 	data[1] = chans >> 8;
 	data[2] = chans & 0xFF;
 
-	ret = no_os_i2c_write(dev->i2c, data, 3, AD5593R_STOP_BIT);
+	wr.len = 3;
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 	if (ret < 0)
 		return ret;
 
 	data[0] = AD5593R_MODE_ADC_READBACK;
-	ret = no_os_i2c_write(dev->i2c, data, 1, AD5593R_RESTART_BIT);
+	wr.len = 1;
+	wr.no_stop = true;
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 	if (ret < 0)
 		return ret;
 
-	ret = no_os_i2c_read(dev->i2c, data, (2 * samples), AD5593R_STOP_BIT);
+	rd.len = 2 * samples;
+	ret = capi_i2c_receive(dev->i2c, &rd);
 	if (ret < 0)
 		return ret;
 
@@ -151,6 +174,10 @@ int32_t ad5593r_reg_write(struct ad5592r_dev *dev, uint8_t reg,
 {
 	int32_t ret;
 	uint8_t data[3];
+	struct capi_i2c_transfer wr = {
+		.buf = data,
+		.len = sizeof(data),
+	};
 
 	if (!dev)
 		return -1;
@@ -159,7 +186,7 @@ int32_t ad5593r_reg_write(struct ad5592r_dev *dev, uint8_t reg,
 	data[1] = value >> 8;
 	data[2] = value;
 
-	ret = no_os_i2c_write(dev->i2c, data, sizeof(data), AD5593R_STOP_BIT);
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 
 	if (reg == AD5592R_REG_RESET && ret < 0) {
 		return 0;
@@ -181,17 +208,25 @@ int32_t ad5593r_reg_read(struct ad5592r_dev *dev, uint8_t reg,
 {
 	int32_t ret;
 	uint8_t data[2];
+	struct capi_i2c_transfer wr = {
+		.buf = data,
+		.len = 1,
+	};
+	struct capi_i2c_transfer rd = {
+		.buf = data,
+		.len = sizeof(data),
+	};
 
 	if (!dev)
 		return -1;
 
 	data[0] = AD5593R_MODE_REG_READBACK | reg;
 
-	ret = no_os_i2c_write(dev->i2c, data, 1, AD5593R_STOP_BIT);
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 	if (ret < 0)
 		return ret;
 
-	ret = no_os_i2c_read(dev->i2c, data, sizeof(data), AD5593R_STOP_BIT);
+	ret = capi_i2c_receive(dev->i2c, &rd);
 	if (ret < 0)
 		return ret;
 
@@ -211,16 +246,24 @@ int32_t ad5593r_gpio_read(struct ad5592r_dev *dev, uint8_t *value)
 {
 	int32_t ret;
 	uint8_t data[2];
+	struct capi_i2c_transfer wr = {
+		.buf = data,
+		.len = 1,
+	};
+	struct capi_i2c_transfer rd = {
+		.buf = data,
+		.len = sizeof(data),
+	};
 
 	if (!dev)
 		return -1;
 
 	data[0] = AD5593R_MODE_GPIO_READBACK;
-	ret = no_os_i2c_write(dev->i2c, data, 1, AD5593R_STOP_BIT);
+	ret = capi_i2c_transmit(dev->i2c, &wr);
 	if (ret < 0)
 		return ret;
 
-	ret = no_os_i2c_read(dev->i2c, data, sizeof(data), AD5593R_STOP_BIT);
+	ret = capi_i2c_receive(dev->i2c, &rd);
 	if (ret < 0)
 		return ret;
 
@@ -243,14 +286,15 @@ int32_t ad5593r_init(struct ad5592r_dev **device,
 	uint8_t i;
 	struct ad5592r_dev *dev;
 
-	dev = (struct ad5592r_dev *)no_os_calloc(1, sizeof(*dev));
+	dev = (struct ad5592r_dev *)capi_calloc(1, sizeof(*dev));
 	if (!dev)
 		return -ENOMEM;
 
-	/* Initialize the SPI communication. */
-	ret = no_os_i2c_init(&dev->i2c, init_param->i2c_init);
+	/* Bind the I2C device. */
+	ret = init_param->i2c_dev ? 0 : -EINVAL;
 	if (ret < 0)
 		goto err_free_device;
+	dev->i2c = init_param->i2c_dev;
 
 	dev->ops = &ad5593r_rw_ops;
 	dev->ldac_mode = 0;
@@ -299,9 +343,9 @@ int32_t ad5593r_init(struct ad5592r_dev **device,
 	return 0;
 
 err_remove_i2c:
-	no_os_i2c_remove(dev->i2c);
+	/* The I2C device and its controller belong to the caller. */
 err_free_device:
-	no_os_free(dev);
+	capi_free(dev);
 	return ret;
 }
 
@@ -324,13 +368,10 @@ int32_t ad5593r_remove(struct ad5592r_dev *dev)
 	if (err)
 		return err;
 
-	/* disable the I2C master */
-	err = no_os_i2c_remove(dev->i2c);
-	if (err)
-		return err;
+	/* The I2C device and its controller belong to the caller. */
 
 	/* finally we can remove our descriptor object */
-	no_os_free(dev);
+	capi_free(dev);
 
 	return 0;
 }

@@ -12,12 +12,12 @@
 #define AD5592R_BASE_H_
 
 #include "stdint.h"
-#include "no_os_delay.h"
-#include "no_os_spi.h"
-#include "no_os_i2c.h"
-#include "no_os_gpio.h"
+#include "capi_time.h"
+#include "capi_spi.h"
+#include "capi_i2c.h"
+#include "capi_gpio.h"
 #include "no_os_util.h"
-#include "no_os_alloc.h"
+#include "capi_alloc.h"
 #include <stdbool.h>
 
 #define CH_MODE_UNUSED			0
@@ -102,9 +102,15 @@ enum ad559xr_range {
 struct ad5592r_init_param {
 	bool int_ref;
 	uint32_t external_vref; /* valid only if int_ref = true */
-	struct no_os_spi_init_param *spi_init;
-	struct no_os_i2c_init_param *i2c_init;
-	struct no_os_gpio_init_param *ss_init;
+	/* SPI device (AD5592R). Its controller must already be initialized,
+	 * and it must outlive the AD5592R descriptor. */
+	struct capi_spi_device *spi_dev;
+	/* I2C device (AD5593R). Its controller must already be initialized,
+	 * and it must outlive the AD5593R descriptor. */
+	struct capi_i2c_device *i2c_dev;
+	/* Optional software slave select (AD5592R). Its port must already be
+	 * initialized. */
+	struct capi_gpio_pin *ss;
 	uint8_t channel_modes[8];
 	uint8_t channel_offstate[8];
 	enum ad559xr_range adc_range;
@@ -115,9 +121,9 @@ struct ad5592r_init_param {
 
 struct ad5592r_dev {
 	const struct ad5592r_rw_ops *ops;
-	struct no_os_i2c_desc *i2c;
-	struct no_os_spi_desc *spi;
-	struct no_os_gpio_desc *ss;
+	struct capi_i2c_device *i2c;
+	struct capi_spi_device *spi;
+	struct capi_gpio_pin *ss;
 	uint16_t spi_msg;
 	uint8_t num_channels;
 	uint16_t cached_dac[8];

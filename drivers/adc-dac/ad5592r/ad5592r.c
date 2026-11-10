@@ -34,6 +34,12 @@ static int ad5592r_write_and_read_spi(struct ad5592r_dev *dev,
 				      uint8_t *data,
 				      uint16_t bytes_number)
 {
+	struct capi_spi_transfer xfer = {
+		.tx_buf = data,
+		.rx_buf = data,
+		.tx_size = bytes_number,
+		.rx_size = bytes_number,
+	};
 	int err;
 	int spi_err;
 
@@ -44,15 +50,15 @@ static int ad5592r_write_and_read_spi(struct ad5592r_dev *dev,
 		return -EINVAL;
 
 	if (dev->ss) {
-		err = no_os_gpio_set_value(dev->ss, NO_OS_GPIO_LOW);
+		err = capi_gpio_pin_set_raw_value(dev->ss, CAPI_GPIO_LOW);
 		if (err)
 			return err;
 	}
 
-	spi_err = no_os_spi_write_and_read(dev->spi, data, bytes_number);
+	spi_err = capi_spi_transceive(dev->spi, &xfer);
 
 	if (dev->ss) {
-		err = no_os_gpio_set_value(dev->ss, NO_OS_GPIO_HIGH);
+		err = capi_gpio_pin_set_raw_value(dev->ss, CAPI_GPIO_HIGH);
 		if (err)
 			return err;
 	}
@@ -139,7 +145,7 @@ int32_t ad5592r_read_adc(struct ad5592r_dev *dev, uint8_t chan,
 		track_time = AD5592R_TEMPERATURE_TRACK_TIME_UNBUFFERED;
 		if (dev->adc_buf)
 			track_time = AD5592R_TEMPERATURE_TRACK_TIME_BUFFERED;
-		no_os_udelay(track_time);
+		capi_wait_us(track_time);
 	}
 
 	/*
@@ -320,22 +326,25 @@ int32_t ad5592r_init(struct ad5592r_dev **device,
 	struct ad5592r_dev *dev;
 	uint8_t i;
 
-	dev = (struct ad5592r_dev *)no_os_calloc(1, sizeof(*dev));
+	dev = (struct ad5592r_dev *)capi_calloc(1, sizeof(*dev));
 	if (!dev)
 		return -ENOMEM;
 
-	/* Initialize the SPI communication. */
-	ret = no_os_spi_init(&dev->spi, init_param->spi_init);
+	/* Bind the SPI device. */
+	ret = init_param->spi_dev ? 0 : -EINVAL;
 	if (ret)
 		goto err_free_device;
+	dev->spi = init_param->spi_dev;
 
 	/* initialize the software slave select (if any) */
-	if (init_param->ss_init) {
-		ret = no_os_gpio_get(&dev->ss, init_param->ss_init);
+	if (init_param->ss) {
+		dev->ss = init_param->ss;
+
+		ret = capi_gpio_pin_set_raw_value(dev->ss, CAPI_GPIO_HIGH);
 		if (ret)
 			goto err_remove_spi;
 
-		ret = no_os_gpio_direction_output(dev->ss, NO_OS_GPIO_HIGH);
+		ret = capi_gpio_pin_set_direction(dev->ss, CAPI_GPIO_OUTPUT);
 		if (ret)
 			goto err_remove_spi_ss;
 	}
@@ -387,12 +396,11 @@ int32_t ad5592r_init(struct ad5592r_dev **device,
 	return 0;
 
 err_remove_spi_ss:
-	if (dev->ss)
-		no_os_gpio_remove(dev->ss);
 err_remove_spi:
-	no_os_spi_remove(dev->spi);
+	/* The SPI device, the slave select and their controllers belong to
+	 * the caller. */
 err_free_device:
-	no_os_free(dev);
+	capi_free(dev);
 	return ret;
 }
 
@@ -415,20 +423,11 @@ int32_t ad5592r_remove(struct ad5592r_dev *dev)
 	if (err)
 		return err;
 
-	/* remove software slave select - if it exists */
-	if (dev->ss) {
-		err = no_os_gpio_remove(dev->ss);
-		if (err)
-			return err;
-	}
-
-	/* disable the SPI master */
-	err = no_os_spi_remove(dev->spi);
-	if (err)
-		return err;
+	/* The SPI device, the slave select and their controllers belong to
+	 * the caller. */
 
 	/* finally we can remove our descriptor object */
-	no_os_free(dev);
+	capi_free(dev);
 
 	return 0;
 }
