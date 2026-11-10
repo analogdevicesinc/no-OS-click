@@ -57,6 +57,7 @@ int adxl367_init(struct adxl367_dev **device,
 		dev->i2c_dev = init_param.i2c_dev;
 	} else {
 		/* Communication type not defined.*/
+		status = -EINVAL;
 		goto comm_err;
 	}
 
