@@ -254,7 +254,7 @@
  * For +/- 4g range a multiplier with value 2 is used.
  * For +/-8g range, a multiplier with value 4 is used.
  */
-#define ADXL367_ACC_SCALE_FACTOR_MUL  245166ULL
+#define ADXL367_ACC_SCALE_FACTOR_MUL  2451662ULL
 #define ADXL367_ACC_SCALE_FACTOR_DIV  1000000000
 
 /*
