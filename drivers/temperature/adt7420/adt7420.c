@@ -365,18 +365,37 @@ int32_t adt7420_reset(struct adt7420_dev *dev)
 }
 
 /***************************************************************************//**
- * @brief Reads the temperature data and converts it to Celsius degrees.
+ * @brief Waits for a conversion result, then reads the temperature data and
+ *        converts it to Celsius degrees.
  *
  * @param dev - The device structure.
  *
  * @return temperature - Temperature in degrees Celsius, or NAN if the read
- *                       fails.
+ *                       fails or no result is ready within
+ *                       ADT7420_RDY_TIMEOUT ms.
 *******************************************************************************/
 float adt7420_get_temperature(struct adt7420_dev *dev)
 {
 	uint16_t temp = 0;
 	float temp_c = 0;
+	uint16_t status;
+	uint16_t timeout = ADT7420_RDY_TIMEOUT;
 	int ret;
+
+	/* /RDY goes low when a new result is in the temperature register. */
+	do {
+		if (adt7420_is_spi(dev))
+			ret = adt7420_reg_read(dev, ADT7320_REG_STATUS, &status);
+		else
+			ret = adt7420_reg_read(dev, ADT7420_REG_STATUS, &status);
+		if (ret)
+			return NAN;
+		if (!(status & ADT7420_STATUS_RDY))
+			break;
+		capi_wait_ms(1);
+	} while (--timeout);
+	if (!timeout)
+		return NAN;
 
 	if (adt7420_is_spi(dev))
 		ret = adt7420_reg_read(dev, ADT7320_REG_TEMP, &temp);

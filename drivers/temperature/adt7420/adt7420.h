@@ -79,6 +79,8 @@
 #define ADT7xxx_ID			0xC
 
 #define ADT7420_RESET_DELAY 		1
+/* Longest wait for a conversion result, in ms: one period in 1 SPS mode */
+#define ADT7420_RDY_TIMEOUT		1200
 
 
 enum dev_interface {
@@ -169,8 +171,8 @@ int adt7420_set_resolution(struct adt7420_dev *dev,
 /*! Resets the SPI or I2C inteface for the ADT7420/ADT7320*/
 int32_t adt7420_reset(struct adt7420_dev *dev);
 
-/*! Reads the temperature data and converts it to Celsius degrees; NAN if
- *  the read fails. */
+/*! Waits for a conversion result, then reads the temperature data and
+ *  converts it to Celsius degrees; NAN if the read fails or times out. */
 float adt7420_get_temperature(struct adt7420_dev *dev);
 
 /*! Read the register value for I2C interface devices */
