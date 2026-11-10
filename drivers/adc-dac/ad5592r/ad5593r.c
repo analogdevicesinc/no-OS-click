@@ -367,13 +367,12 @@ int32_t ad5593r_remove(struct ad5592r_dev *dev)
 	/* before anything else, reset the chip to bring
 	 * it to a known state */
 	err = ad5592r_software_reset(dev);
-	if (err)
-		return err;
 
 	/* The I2C device and its controller belong to the caller. */
 
-	/* finally we can remove our descriptor object */
+	/* finally we can remove our descriptor object, even if the reset
+	 * failed */
 	capi_free(dev);
 
-	return 0;
+	return err;
 }
