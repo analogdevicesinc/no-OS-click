@@ -10,18 +10,19 @@
 
 #include <stdlib.h>
 #include "adxl367.h"
-#include "no_os_delay.h"
+#include "capi_time.h"
 #include "no_os_error.h"
 #include "no_os_util.h"
-#include "no_os_alloc.h"
+#include "capi_alloc.h"
 #include "no_os_print_log.h"
 
 static const uint8_t adxl367_scale_mul[3] = {1, 2, 4};
 static uint8_t samples_per_set = 0;
 
 /***************************************************************************//**
- * @brief Initializes communication with the device and checks if the part is
- *        present by reading the device id.
+ * @brief Binds the device to its SPI/I2C device and checks if the part is
+ *        present by reading the device id. The SPI/I2C controller must
+ *        already be initialized.
  *
  * @param device     - The device structure.
  * @param init_param - The structure that contains the device initial
@@ -36,7 +37,7 @@ int adxl367_init(struct adxl367_dev **device,
 	uint8_t reg_value;
 	int status;
 
-	dev = (struct adxl367_dev *)no_os_calloc(1, sizeof(*dev));
+	dev = (struct adxl367_dev *)capi_calloc(1, sizeof(*dev));
 	if (!dev)
 		return -1;
 
@@ -44,14 +45,16 @@ int adxl367_init(struct adxl367_dev **device,
 	dev->comm_type = init_param.comm_type;
 	if (dev->comm_type == ADXL367_SPI_COMM) {
 		/* SPI */
-		status = no_os_spi_init(&dev->spi_desc, &init_param.spi_init);
+		status = init_param.spi_dev ? 0 : -EINVAL;
 		if (status)
 			goto comm_err;
+		dev->spi_dev = init_param.spi_dev;
 	} else if (dev->comm_type == ADXL367_I2C_COMM) {
 		/* I2C */
-		status = no_os_i2c_init(&dev->i2c_desc, &init_param.i2c_init);
+		status = init_param.i2c_dev ? 0 : -EINVAL;
 		if (status)
 			goto comm_err;
+		dev->i2c_dev = init_param.i2c_dev;
 		dev->i2c_slave_address = init_param.i2c_slave_address;
 	} else {
 		/* Communication type not defined.*/
@@ -94,12 +97,9 @@ int adxl367_init(struct adxl367_dev **device,
 	return 0;
 
 err:
-	if (dev->comm_type == ADXL367_SPI_COMM)
-		no_os_spi_remove(dev->spi_desc);
-	else
-		no_os_i2c_remove(dev->i2c_desc);
+	/* The SPI/I2C device and its controller belong to the caller. */
 comm_err:
-	no_os_free(dev);
+	capi_free(dev);
 	return status;
 }
 
@@ -112,16 +112,10 @@ comm_err:
 *******************************************************************************/
 int adxl367_remove(struct adxl367_dev *dev)
 {
-	int ret;
+	/* The SPI/I2C device and its controller belong to the caller. */
+	capi_free(dev);
 
-	if (dev->comm_type == ADXL367_SPI_COMM)
-		ret = no_os_spi_remove(dev->spi_desc);
-	else
-		ret = no_os_i2c_remove(dev->i2c_desc);
-
-	no_os_free(dev);
-
-	return ret;
+	return 0;
 }
 
 /***************************************************************************//**
@@ -171,7 +165,7 @@ int adxl367_self_test(struct adxl367_dev *dev)
 	if (ret)
 		return ret;
 	// 4 / ODR delay
-	no_os_mdelay(st_delay_ms);
+	capi_wait_ms(st_delay_ms);
 	ret = adxl367_get_register_value(dev, &read_val, ADXL367_REG_XDATA_H, 1);
 	if (ret)
 		return ret;
@@ -189,7 +183,7 @@ int adxl367_self_test(struct adxl367_dev *dev)
 	if (ret)
 		return ret;
 	// 4 / ODR delay
-	no_os_mdelay(st_delay_ms);
+	capi_wait_ms(st_delay_ms);
 	ret = adxl367_get_register_value(dev, &read_val, ADXL367_REG_XDATA_H, 1);
 	if (ret)
 		return ret;
@@ -242,12 +236,23 @@ int adxl367_set_register_value(struct adxl367_dev *dev,
 	buffer[2] = register_value;
 
 	if (dev->comm_type == ADXL367_SPI_COMM) {
+		struct capi_spi_transfer xfer = {
+			.tx_buf = buffer,
+			.rx_buf = buffer,
+			.tx_size = sizeof(buffer),
+			.rx_size = sizeof(buffer),
+		};
+
 		buffer[0] = ADXL367_WRITE_REG;
-		return no_os_spi_write_and_read(dev->spi_desc,
-						buffer, 3);
+		return capi_spi_transceive(dev->spi_dev, &xfer);
 	} else {
+		struct capi_i2c_transfer xfer = {
+			.buf = buffer,
+			.len = sizeof(buffer),
+		};
+
 		buffer[0] = dev->i2c_slave_address + ADXL367_I2C_WRITE;
-		return no_os_i2c_write(dev->i2c_desc, buffer, 3, 1);
+		return capi_i2c_transmit(dev->i2c_dev, &xfer);
 	}
 
 }
@@ -277,18 +282,35 @@ int adxl367_get_register_value(struct adxl367_dev *dev,
 	buffer[1] = register_address;
 
 	if (dev->comm_type == ADXL367_SPI_COMM) {
+		struct capi_spi_transfer xfer = {
+			.tx_buf = buffer,
+			.rx_buf = buffer,
+			.tx_size = register_nb + 2,
+			.rx_size = register_nb + 2,
+		};
+
 		buffer[0] = ADXL367_READ_REG;
-		ret = no_os_spi_write_and_read(dev->spi_desc, buffer, register_nb + 2);
+		ret = capi_spi_transceive(dev->spi_dev, &xfer);
 		if (ret)
 			return ret;
 		for (index = 0; index < register_nb; index++)
 			read_data[index] = buffer[index + 2];
 	} else {
+		struct capi_i2c_transfer write_xfer = {
+			.buf = buffer,
+			.len = 2,
+			.no_stop = true,
+		};
+		struct capi_i2c_transfer read_xfer = {
+			.buf = buffer,
+			.len = register_nb + 1,
+		};
+
 		buffer[0] = dev->i2c_slave_address + ADXL367_I2C_READ;
-		ret = no_os_i2c_write(dev->i2c_desc, buffer, 2, 0);
+		ret = capi_i2c_transmit(dev->i2c_dev, &write_xfer);
 		if (ret)
 			return ret;
-		ret = no_os_i2c_read(dev->i2c_desc, buffer, register_nb + 1, 1);
+		ret = capi_i2c_receive(dev->i2c_dev, &read_xfer);
 		if (ret)
 			return ret;
 		for (index = 0; index < register_nb; index++)
@@ -315,17 +337,34 @@ static int adxl367_get_fifo_value(struct adxl367_dev *dev,
 	uint16_t index;
 
 	if (dev->comm_type == ADXL367_SPI_COMM) {
+		struct capi_spi_transfer xfer = {
+			.tx_buf = dev->fifo_buffer,
+			.rx_buf = dev->fifo_buffer,
+			.tx_size = bytes_nb + 1,
+			.rx_size = bytes_nb + 1,
+		};
+
 		dev->fifo_buffer[0] = ADXL367_READ_FIFO;
-		ret = no_os_spi_write_and_read(dev->spi_desc, dev->fifo_buffer, bytes_nb + 1);
+		ret = capi_spi_transceive(dev->spi_dev, &xfer);
 		if (ret)
 			return ret;
 	} else {
+		struct capi_i2c_transfer write_xfer = {
+			.buf = dev->fifo_buffer,
+			.len = 2,
+			.no_stop = true,
+		};
+		struct capi_i2c_transfer read_xfer = {
+			.buf = dev->fifo_buffer,
+			.len = bytes_nb + 1,
+		};
+
 		dev->fifo_buffer[0] = dev->i2c_slave_address + ADXL367_I2C_READ;
 		dev->fifo_buffer[1] = ADXL367_REG_I2C_FIFO_DATA;
-		ret = no_os_i2c_write(dev->i2c_desc, dev->fifo_buffer, 2, 0);
+		ret = capi_i2c_transmit(dev->i2c_dev, &write_xfer);
 		if (ret)
 			return ret;
-		ret = no_os_i2c_read(dev->i2c_desc, dev->fifo_buffer, bytes_nb + 1, 1);
+		ret = capi_i2c_receive(dev->i2c_dev, &read_xfer);
 		if (ret)
 			return ret;
 	}
@@ -396,7 +435,7 @@ int adxl367_software_reset(struct adxl367_dev *dev)
 	dev->z_offset = 0;
 
 	//initialization delay
-	no_os_mdelay(20);
+	capi_wait_ms(20);
 
 	return 0;
 }
@@ -425,7 +464,7 @@ int adxl367_set_power_mode(struct adxl367_dev *dev,
 
 	//100 ms wait time before reading acceleration data.
 	if (mode == ADXL367_OP_MEASURE)
-		no_os_mdelay(100);
+		capi_wait_ms(100);
 
 	dev->op_mode = mode;
 

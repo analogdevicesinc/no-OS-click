@@ -13,8 +13,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "no_os_spi.h"
-#include "no_os_i2c.h"
+#include "capi_spi.h"
+#include "capi_i2c.h"
 
 /* ADXL367 communication commands */
 #define ADXL367_WRITE_REG               0x0A
@@ -419,10 +419,10 @@ struct adxl367_dev {
 	enum adxl367_id			id;
 	/** Communication type - I2C or SPI. */
 	enum adxl367_comm_type		comm_type;
-	/** SPI Descriptor */
-	struct no_os_spi_desc		*spi_desc;
-	/** I2C Descriptor */
-	struct no_os_i2c_desc  		*i2c_desc;
+	/** SPI device, owned by the caller */
+	struct capi_spi_device		*spi_dev;
+	/** I2C device, owned by the caller */
+	struct capi_i2c_device		*i2c_dev;
 	/** Depending on ASEL pin, can be 0x53 or 0x1D. Only for I2C Comm. */
 	uint8_t i2c_slave_address;
 	/** Measurement Range: */
@@ -448,10 +448,12 @@ struct adxl367_init_param {
 	enum adxl367_id			id;
 	/** Communication type - I2C or SPI. */
 	enum adxl367_comm_type 		comm_type;
-	/** SPI Initialization structure. */
-	struct no_os_spi_init_param	spi_init;
-	/** I2C Initialization structure. */
-	struct no_os_i2c_init_param    	i2c_init;
+	/** SPI device, for ADXL367_SPI_COMM. Its controller must already be
+	 *  initialized, and it must outlive the ADXL367 descriptor. */
+	struct capi_spi_device		*spi_dev;
+	/** I2C device, for ADXL367_I2C_COMM. Its controller must already be
+	 *  initialized, and it must outlive the ADXL367 descriptor. */
+	struct capi_i2c_device		*i2c_dev;
 	/** Depending on ASEL pin, can be 0x53 or 0x1D. Only for I2C Comm. */
 	uint8_t 			i2c_slave_address;
 };
