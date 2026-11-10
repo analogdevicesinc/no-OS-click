@@ -1,0 +1,16 @@
+# Copyright (c) 2026 Analog Devices, Inc.
+# SPDX-License-Identifier: BSD-3-Clause
+
+name: no_os_click
+type: application
+version: "0.9.0"
+description: "CAPI application for Click boards using no-OS-click drivers"
+
+capi_version_requirement: ">=0.9.0"
+
+# Each key under depends.platform is a value of PLATFORM in a preset.
+# A build resolves only the platform that its preset selects.
+# The environment variable CAPI_<PLATFORM>_DIR overrides the checkout.
+depends:
+  platform:
+    alif: {git: "https://github.com/analogdevicesinc/capi-alif.git", checkout: main}
