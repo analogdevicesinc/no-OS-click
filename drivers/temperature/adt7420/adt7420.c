@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 #include "no_os_error.h"
 #include "capi_alloc.h"
 #include "capi_time.h"
@@ -368,18 +369,22 @@ int32_t adt7420_reset(struct adt7420_dev *dev)
  *
  * @param dev - The device structure.
  *
- * @return temperature - Temperature in degrees Celsius.
+ * @return temperature - Temperature in degrees Celsius, or NAN if the read
+ *                       fails.
 *******************************************************************************/
 float adt7420_get_temperature(struct adt7420_dev *dev)
 {
 	uint16_t temp = 0;
 	float temp_c = 0;
+	int ret;
 
 	if (adt7420_is_spi(dev))
-		adt7420_reg_read(dev, ADT7320_REG_TEMP, &temp);
+		ret = adt7420_reg_read(dev, ADT7320_REG_TEMP, &temp);
 	else {
-		adt7420_reg_read(dev, ADT7420_REG_TEMP_MSB, &temp);
+		ret = adt7420_reg_read(dev, ADT7420_REG_TEMP_MSB, &temp);
 	}
+	if (ret)
+		return NAN;
 
 	if (dev->resolution_setting) {
 		if (temp & ADT7420_16BIT_SIGN)
