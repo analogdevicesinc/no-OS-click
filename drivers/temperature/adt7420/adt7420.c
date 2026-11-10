@@ -226,17 +226,17 @@ int32_t adt7420_init(struct adt7420_dev **device,
 			status = adt7420_reg_read(dev, ADT7420_REG_ID, &device_connected_check);
 
 		if (status)
-			return status;
+			goto adt7420_init_error;
 		device_connected_check >>= 4; // Manufacturer ID
 
-		if (device_connected_check != ADT7xxx_ID) // AD7xxx ID Check
-			status = -1;
-		else
-			status = 0;
+		if (device_connected_check != ADT7xxx_ID) { // AD7xxx ID Check
+			status = -ENODEV;
+			goto adt7420_init_error;
+		}
 
 		*device = dev;
 
-		return status;
+		return 0;
 	}
 
 	return status;
