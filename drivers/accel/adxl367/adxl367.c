@@ -70,13 +70,17 @@ int adxl367_init(struct adxl367_dev **device,
 	status = adxl367_get_register_value(dev, &reg_value, ADXL367_REG_DEVID_AD, 1);
 	if (status)
 		goto err;
-	if (reg_value != ADXL367_DEVICE_AD)
+	if (reg_value != ADXL367_DEVICE_AD) {
+		status = -ENODEV;
 		goto err;
+	}
 	status = adxl367_get_register_value(dev, &reg_value, ADXL367_REG_DEVID_MST, 1);
 	if (status)
 		goto err;
-	if (reg_value != ADXL367_DEVICE_MST)
+	if (reg_value != ADXL367_DEVICE_MST) {
+		status = -ENODEV;
 		goto err;
+	}
 	status = adxl367_get_register_value(dev, &reg_value, ADXL367_REG_PARTID, 1);
 	if (status)
 		goto err;
