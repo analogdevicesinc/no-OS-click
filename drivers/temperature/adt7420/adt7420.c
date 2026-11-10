@@ -11,8 +11,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "no_os_error.h"
-#include "no_os_alloc.h"
-#include "no_os_delay.h"
+#include "capi_alloc.h"
+#include "capi_time.h"
 #include "adt7420.h"
 
 const struct adt7420_chip_info chip_info[] = {
@@ -93,6 +93,10 @@ int adt7420_spi_reg_write(struct adt7420_dev *dev, uint16_t register_address,
 			  uint32_t data)
 {
 	uint8_t data_buffer[3] = { 0, 0, 0 };
+	struct capi_spi_transfer xfer = {
+		.tx_buf = data_buffer,
+		.rx_buf = data_buffer,
+	};
 	uint8_t num_bytes;
 
 	if (no_os_field_get(ADT7320_L16, register_address)) {
@@ -109,7 +113,10 @@ int adt7420_spi_reg_write(struct adt7420_dev *dev, uint16_t register_address,
 	data_buffer[0] = (no_os_field_get(ADT7320_ADDR_MSK,
 					  register_address) << 3) & ADT7320_WRITE_MASK_CMD;
 
-	return no_os_spi_write_and_read(dev->spi_desc, data_buffer, num_bytes);
+	xfer.tx_size = num_bytes;
+	xfer.rx_size = num_bytes;
+
+	return capi_spi_transceive(dev->spi_dev, &xfer);
 
 }
 
@@ -124,6 +131,9 @@ int adt7420_i2c_reg_write(struct adt7420_dev *dev, uint16_t register_address,
 			  uint32_t data)
 {
 	uint8_t data_buffer[3] = { 0, 0, 0 };
+	struct capi_i2c_transfer xfer = {
+		.buf = data_buffer,
+	};
 	uint8_t num_bytes;
 
 	if (no_os_field_get(ADT7320_L16, register_address)) {
@@ -137,8 +147,9 @@ int adt7420_i2c_reg_write(struct adt7420_dev *dev, uint16_t register_address,
 
 	data_buffer[0] = register_address;
 
-	return no_os_i2c_write(dev->i2c_desc, data_buffer, num_bytes,
-			       1); //no repeat start
+	xfer.len = num_bytes;
+
+	return capi_i2c_transmit(dev->i2c_dev, &xfer); //no repeat start
 
 }
 
@@ -182,16 +193,21 @@ int32_t adt7420_init(struct adt7420_dev **device,
 	int32_t status;
 	uint16_t device_connected_check = 0;
 
-	dev = (struct adt7420_dev *)no_os_malloc(sizeof(*dev));
+	if (chip_info[init_param.active_device].communication == SPI ?
+	    !init_param.interface_init.spi_dev : !init_param.interface_init.i2c_dev)
+		return -EINVAL;
+
+	dev = (struct adt7420_dev *)capi_malloc(sizeof(*dev));
 	if (!dev)
 		return -ENOMEM;
 
 	dev->active_device = init_param.active_device;
 
 	if (adt7420_is_spi(dev))
-		status = no_os_spi_init(&dev->spi_desc, &init_param.interface_init.spi_init);
+		dev->spi_dev = init_param.interface_init.spi_dev;
 	else
-		status = no_os_i2c_init(&dev->i2c_desc, &init_param.interface_init.i2c_init);
+		dev->i2c_dev = init_param.interface_init.i2c_dev;
+	status = 0;
 
 	if (status != -1) {
 		/* Device Settings */
@@ -239,15 +255,10 @@ adt7420_init_error:
 *******************************************************************************/
 int32_t adt7420_remove(struct adt7420_dev *dev)
 {
-	int32_t ret;
+	/* The SPI/I2C device and its controller belong to the caller. */
+	capi_free(dev);
 
-	if (!(adt7420_is_spi(dev)))
-		ret = no_os_i2c_remove(dev->i2c_desc);
-	else
-		ret = no_os_spi_remove(dev->spi_desc);
-	no_os_free(dev);
-
-	return ret;
+	return 0;
 }
 
 /***************************************************************************//**
@@ -315,22 +326,29 @@ int32_t adt7420_reset(struct adt7420_dev *dev)
 
 	if (adt7420_is_spi(dev)) {
 		uint8_t data_buffer[] = { 0xFF, 0xFF, 0xFF, 0xFF };
-		ret = no_os_spi_write_and_read(dev->spi_desc,
-					       data_buffer,
-					       sizeof(data_buffer));
+		struct capi_spi_transfer xfer = {
+			.tx_buf = data_buffer,
+			.rx_buf = data_buffer,
+			.tx_size = sizeof(data_buffer),
+			.rx_size = sizeof(data_buffer),
+		};
+
+		ret = capi_spi_transceive(dev->spi_dev, &xfer);
 		if (ret)
 			return ret;
 	} else {
 		uint8_t register_address = ADT7420_REG_RESET;
-		if (no_os_i2c_write(dev->i2c_desc,
-				    &register_address,
-				    1,
-				    1)) {
+		struct capi_i2c_transfer xfer = {
+			.buf = &register_address,
+			.len = 1,
+		};
+
+		if (capi_i2c_transmit(dev->i2c_dev, &xfer)) {
 			//no repeat start
 			return -1;
 		}
 	}
-	no_os_mdelay(ADT7420_RESET_DELAY); /* device restart */
+	capi_wait_ms(ADT7420_RESET_DELAY); /* device restart */
 	dev->resolution_setting = 0;
 	return 0;
 }
@@ -387,6 +405,10 @@ int adt7420_spi_reg_read(struct adt7420_dev *dev,
 			 uint16_t register_address, uint16_t *data)
 {
 	uint8_t data_buffer[3] = { 0, 0, 0 };
+	struct capi_spi_transfer xfer = {
+		.tx_buf = data_buffer,
+		.rx_buf = data_buffer,
+	};
 	uint8_t num_bytes;
 
 	if (no_os_field_get(ADT7320_L16, register_address))
@@ -397,7 +419,10 @@ int adt7420_spi_reg_read(struct adt7420_dev *dev,
 	data_buffer[0] = ADT7320_READ_CMD  | (no_os_field_get(ADT7320_ADDR_MSK,
 					      register_address) << 3);
 
-	if (no_os_spi_write_and_read(dev->spi_desc, data_buffer, num_bytes))
+	xfer.tx_size = num_bytes;
+	xfer.rx_size = num_bytes;
+
+	if (capi_spi_transceive(dev->spi_dev, &xfer))
 		return -1;
 
 	if (num_bytes == 2)
@@ -421,18 +446,23 @@ int adt7420_i2c_reg_read(struct adt7420_dev *dev, uint16_t register_address,
 			 uint16_t *data)
 {
 	uint8_t data_buffer[3] = { 0, 0 };
-	uint8_t num_bytes;
 	uint8_t reg_addr = register_address;
+	struct capi_i2c_transfer xfer = {
+		.repeated_start = true,
+		.sub_address = &reg_addr,
+		.sub_address_len = 1,
+		.buf = data_buffer,
+	};
+	uint8_t num_bytes;
 
 	if (no_os_field_get(ADT7320_L16, register_address))
 		num_bytes = 2;
 	else
 		num_bytes = 1;
 
-	if (no_os_i2c_write(dev->i2c_desc, &reg_addr, 1,
-			    0)) //add a repeat start
-		return -1;
-	if (no_os_i2c_read(dev->i2c_desc, data_buffer, num_bytes, 1))
+	xfer.len = num_bytes;
+
+	if (capi_i2c_receive(dev->i2c_dev, &xfer)) //add a repeat start
 		return -1;
 
 	if (num_bytes == 1)

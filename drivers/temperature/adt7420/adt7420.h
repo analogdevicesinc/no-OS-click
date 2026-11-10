@@ -10,8 +10,8 @@
 #ifndef ADT7420_H_
 #define ADT7420_H_
 
-#include "no_os_spi.h"
-#include "no_os_i2c.h"
+#include "capi_spi.h"
+#include "capi_i2c.h"
 #include "no_os_util.h"
 #include <stdbool.h>
 
@@ -102,10 +102,10 @@ enum adt7420_type {
 };
 
 struct adt7420_dev {
-	/* I2C */
-	struct no_os_i2c_desc	*i2c_desc;
-	/* SPI */
-	struct no_os_spi_desc	*spi_desc;
+	/* I2C device, owned by the caller */
+	struct capi_i2c_device	*i2c_dev;
+	/* SPI device, owned by the caller */
+	struct capi_spi_device	*spi_dev;
 	/* Device Settings */
 	enum adt7420_type active_device;
 	/* Device Settings */
@@ -114,11 +114,13 @@ struct adt7420_dev {
 };
 
 struct adt7420_init_param {
+	/* The SPI or I2C device, per active_device. Its controller must already
+	 * be initialized, and it must outlive the ADT7420 descriptor. */
 	union interface_type {
 		/* I2C */
-		struct no_os_i2c_init_param	i2c_init;
+		struct capi_i2c_device	*i2c_dev;
 		/* SPI */
-		struct no_os_spi_init_param	spi_init;
+		struct capi_spi_device	*spi_dev;
 	} interface_init;
 	/* Device Settings */
 	uint8_t		resolution_setting;
