@@ -210,9 +210,6 @@ int32_t adt7420_init(struct adt7420_dev **device,
 	status = 0;
 
 	if (status != -1) {
-		/* Device Settings */
-		dev->resolution_setting = init_param.resolution_setting;
-
 		/* Reset device to default values to ensure all internal circuitry is properly initialised*/
 		status = adt7420_reset(dev);
 		if (status < 0)
@@ -233,6 +230,11 @@ int32_t adt7420_init(struct adt7420_dev **device,
 			status = -ENODEV;
 			goto adt7420_init_error;
 		}
+
+		/* Device Settings, after the reset that cleared them */
+		status = adt7420_set_resolution(dev, init_param.resolution_setting);
+		if (status)
+			goto adt7420_init_error;
 
 		*device = dev;
 
