@@ -32,6 +32,14 @@ const struct adt7420_chip_info chip_info[] = {
 		.resolution = 16,
 		.communication = SPI,
 	},
+	[ID_ADT7311] = {
+		.resolution = 16,
+		.communication = SPI,
+	},
+	[ID_ADT7312] = {
+		.resolution = 16,
+		.communication = SPI,
+	},
 	[ID_ADT7320] = {
 		.resolution = 16,
 		.communication = SPI,
