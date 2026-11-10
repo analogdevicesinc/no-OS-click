@@ -132,6 +132,8 @@ int32_t ad5593r_multi_read_adc(struct ad5592r_dev *dev, uint16_t chans,
 		return -1;
 
 	samples = no_os_hweight16(chans);
+	if (2 * samples > sizeof(data))
+		return -EINVAL;
 
 	data[0] = AD5593R_MODE_CONF | AD5592R_REG_ADC_SEQ;
 	data[1] = chans >> 8;
