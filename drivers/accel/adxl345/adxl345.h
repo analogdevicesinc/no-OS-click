@@ -11,8 +11,8 @@
 #define ADXL345_H_
 
 #include <stdint.h>
-#include "no_os_i2c.h"
-#include "no_os_spi.h"
+#include "capi_i2c.h"
+#include "capi_spi.h"
 
 /* Options for communicating with the device. */
 #define ADXL345_SPI_COMM       0
@@ -196,10 +196,10 @@ enum adxl345_divisor_bandwidth {
  * @brief ADXL345 Device structure.
  */
 struct adxl345_dev {
-	/** I2C Descriptor */
-	struct no_os_i2c_desc	*i2c_desc;
-	/** SPI Descriptor */
-	struct no_os_spi_desc	*spi_desc;
+	/** I2C device, owned by the caller */
+	struct capi_i2c_device	*i2c_dev;
+	/** SPI device, owned by the caller */
+	struct capi_spi_device	*spi_dev;
 	/** Device type ADXL345 or 346 */
 	enum adxl345_type	dev_type;
 	/** Device Communication type: ADXL345_SPI_COMM, ADXL345_I2C_COMM */
@@ -215,10 +215,12 @@ struct adxl345_dev {
  * @brief Structure holding the parameters for ADXL345 device initialization.
  */
 struct adxl345_init_param {
-	/** I2C Initialization structure. */
-	struct no_os_i2c_init_param	i2c_init;
-	/** SPI Initialization structure. */
-	struct no_os_spi_init_param	spi_init;
+	/** I2C device, for ADXL345_I2C_COMM. Its controller must already be
+	 *  initialized, and it must outlive the ADXL345 descriptor. */
+	struct capi_i2c_device		*i2c_dev;
+	/** SPI device, for ADXL345_SPI_COMM. Its controller must already be
+	 *  initialized, and it must outlive the ADXL345 descriptor. */
+	struct capi_spi_device		*spi_dev;
 	/** Device type ADXL345 or 346 */
 	enum adxl345_type		dev_type;
 	/** Device Communication type: ADXL345_SPI_COMM, ADXL345_I2C_COMM */
@@ -238,7 +240,7 @@ void adxl345_set_register_value(struct adxl345_dev *dev,
 				uint8_t register_address,
 				uint8_t register_value);
 
-/*! Init. the comm. peripheral and checks if the ADXL345 part is present. */
+/*! Binds the SPI/I2C device and checks if the ADXL345 part is present. */
 int32_t adxl345_init(struct adxl345_dev **device,
 		     struct adxl345_init_param init_param);
 

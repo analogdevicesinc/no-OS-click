@@ -10,7 +10,7 @@
 
 #include <stdlib.h>
 #include "adxl345.h"
-#include "no_os_alloc.h"
+#include "capi_alloc.h"
 #include "no_os_error.h"
 
 static const uint8_t adxl345_part_id[] = {
@@ -33,21 +33,27 @@ uint8_t adxl345_get_register_value(struct adxl345_dev *dev,
 	uint8_t register_value = 0;
 
 	if (dev->communication_type == ADXL345_SPI_COMM) {
+		struct capi_spi_transfer xfer = {
+			.tx_buf = data_buffer,
+			.rx_buf = data_buffer,
+			.tx_size = sizeof(data_buffer),
+			.rx_size = sizeof(data_buffer),
+		};
+
 		data_buffer[0] = ADXL345_SPI_READ | register_address;
 		data_buffer[1] = 0;
-		no_os_spi_write_and_read(dev->spi_desc,
-					 data_buffer,
-					 2);
+		capi_spi_transceive(dev->spi_dev, &xfer);
 		register_value = data_buffer[1];
 	} else {
-		no_os_i2c_write(dev->i2c_desc,
-				&register_address, // Transmission data.
-				1,                 // Number of bytes to write.
-				0);                // Stop condition control.
-		no_os_i2c_read(dev->i2c_desc,
-			       &register_value,    // Received data.
-			       1,                  // Number of bytes to read.
-			       1);                 // Stop condition control.
+		struct capi_i2c_transfer xfer = {
+			.repeated_start = true,
+			.sub_address = &register_address,
+			.sub_address_len = 1,
+			.buf = &register_value,
+			.len = 1,
+		};
+
+		capi_i2c_receive(dev->i2c_dev, &xfer);
 	}
 
 	return register_value;
@@ -67,34 +73,41 @@ void adxl345_set_register_value(struct adxl345_dev *dev,
 	uint8_t data_buffer[2] = {0, 0};
 
 	if (dev->communication_type == ADXL345_SPI_COMM) {
+		struct capi_spi_transfer xfer = {
+			.tx_buf = data_buffer,
+			.rx_buf = data_buffer,
+			.tx_size = sizeof(data_buffer),
+			.rx_size = sizeof(data_buffer),
+		};
+
 		data_buffer[0] = ADXL345_SPI_WRITE | register_address;
 		data_buffer[1] = register_value;
-		no_os_spi_write_and_read(dev->spi_desc,
-					 data_buffer,
-					 2);
+		capi_spi_transceive(dev->spi_dev, &xfer);
 	} else {
-		data_buffer[0] = register_address;
-		data_buffer[1] = register_value;
-		no_os_i2c_write(dev->i2c_desc,
-				data_buffer,        // Received data.
-				2,                  // Number of bytes to read.
-				1);                 // Stop condition control.
+		struct capi_i2c_transfer xfer = {
+			.sub_address = &register_address,
+			.sub_address_len = 1,
+			.buf = &register_value,
+			.len = 1,
+		};
+
+		capi_i2c_transmit(dev->i2c_dev, &xfer);
 	}
 }
 
 /***************************************************************************//**
- * @brief Initializes the communication peripheral and checks if the ADXL345
- *        part is present.
+ * @brief Binds the device to its SPI/I2C device and checks if the ADXL345
+ *        part is present. The SPI/I2C controller must already be initialized.
  *
  * @param device     - The device structure.
  * @param init_param - The structure that contains the device initial
  * 		       parameters.
  *
  * @return status    - Result of the initialization procedure.
- *                     Example: -1 - I2C/SPI peripheral was not initialized or
- *                                   ADXL345 part is not present.
- *                               0 - I2C/SPI peripheral is initialized and
- *                                   ADXL345 part is present.
+ *                     Example: -EINVAL - no SPI/I2C device for the selected
+ *                                        communication type.
+ *                              -1 - ADXL345 part is not present.
+ *                               0 - ADXL345 part is present.
 *******************************************************************************/
 int32_t adxl345_init(struct adxl345_dev **device,
 		     struct adxl345_init_param init_param)
@@ -102,16 +115,17 @@ int32_t adxl345_init(struct adxl345_dev **device,
 	struct adxl345_dev *dev;
 	int32_t status = 0;
 
-	dev = (struct adxl345_dev *)no_os_malloc(sizeof(*dev));
+	if (init_param.communication_type == ADXL345_SPI_COMM ?
+	    !init_param.spi_dev : !init_param.i2c_dev)
+		return -EINVAL;
+
+	dev = (struct adxl345_dev *)capi_malloc(sizeof(*dev));
 	if (!dev)
 		return -ENOMEM;
 
 	dev->communication_type = init_param.communication_type;
-
-	if (dev->communication_type == ADXL345_SPI_COMM)
-		status = no_os_spi_init(&dev->spi_desc, &init_param.spi_init);
-	else
-		status = no_os_i2c_init(&dev->i2c_desc, &init_param.i2c_init);
+	dev->spi_dev = init_param.spi_dev;
+	dev->i2c_dev = init_param.i2c_dev;
 
 	if (adxl345_get_register_value(dev,
 				       ADXL345_DEVID) != adxl345_part_id[init_param.dev_type])
@@ -134,16 +148,10 @@ int32_t adxl345_init(struct adxl345_dev **device,
 *******************************************************************************/
 int32_t adxl345_remove(struct adxl345_dev *dev)
 {
-	int32_t ret;
+	/* The SPI/I2C device and its controller belong to the caller. */
+	capi_free(dev);
 
-	if (dev->communication_type == ADXL345_SPI_COMM)
-		ret = no_os_spi_remove(dev->spi_desc);
-	else
-		ret = no_os_i2c_remove(dev->i2c_desc);
-
-	no_os_free(dev);
-
-	return ret;
+	return 0;
 }
 
 /***************************************************************************//**
@@ -186,12 +194,17 @@ void adxl345_get_xyz(struct adxl345_dev *dev,
 	uint8_t read_buffer[7]    = {0, 0, 0, 0, 0, 0, 0};
 
 	if (dev->communication_type == ADXL345_SPI_COMM) {
+		struct capi_spi_transfer xfer = {
+			.tx_buf = read_buffer,
+			.rx_buf = read_buffer,
+			.tx_size = sizeof(read_buffer),
+			.rx_size = sizeof(read_buffer),
+		};
+
 		read_buffer[0] = ADXL345_SPI_READ |
 				 ADXL345_SPI_MB |
 				 first_reg_address;
-		no_os_spi_write_and_read(dev->spi_desc,
-					 read_buffer,
-					 7);
+		capi_spi_transceive(dev->spi_dev, &xfer);
 		/* x = ((ADXL345_DATAX1) << 8) + ADXL345_DATAX0 */
 		*x = ((int16_t)read_buffer[2] << 8) + read_buffer[1];
 		/* y = ((ADXL345_DATAY1) << 8) + ADXL345_DATAY0 */
@@ -199,14 +212,15 @@ void adxl345_get_xyz(struct adxl345_dev *dev,
 		/* z = ((ADXL345_DATAZ1) << 8) + ADXL345_DATAZ0 */
 		*z = ((int16_t)read_buffer[6] << 8) + read_buffer[5];
 	} else {
-		no_os_i2c_write(dev->i2c_desc,
-				&first_reg_address, // Transmission data.
-				1,                  // Number of bytes to write.
-				0);                 // Stop condition control.
-		no_os_i2c_read(dev->i2c_desc,
-			       read_buffer,         // Received data.
-			       6,                   // Number of bytes to read.
-			       1);                  // Stop condition control.
+		struct capi_i2c_transfer xfer = {
+			.repeated_start = true,
+			.sub_address = &first_reg_address,
+			.sub_address_len = 1,
+			.buf = read_buffer,
+			.len = 6,
+		};
+
+		capi_i2c_receive(dev->i2c_dev, &xfer);
 		/* x = ((ADXL345_DATAX1) << 8) + ADXL345_DATAX0 */
 		*x = ((int16_t)read_buffer[1] << 8) + read_buffer[0];
 		/* y = ((ADXL345_DATAY1) << 8) + ADXL345_DATAY0 */
