@@ -35,19 +35,20 @@
 #define __AD7091R_H__
 
 #include <stdint.h>
-#include "no_os_spi.h"
+#include "capi_spi.h"
 
 struct ad7091r_dev {
-	/* SPI */
-	struct no_os_spi_desc	*spi_desc;
+	/* SPI device, owned by the caller */
+	struct capi_spi_device	*spi_dev;
 };
 
 struct ad7091r_init_param {
-	/* SPI */
-	struct no_os_spi_init_param	spi_init;
+	/* SPI device. Its controller must already be initialized, and it must
+	 * outlive the AD7091R descriptor. */
+	struct capi_spi_device	*spi_dev;
 };
 
-/*! Initializes the SPI communication peripheral. */
+/*! Binds the SPI device and resets the AD7091R. */
 int8_t ad7091r_init(struct ad7091r_dev **device,
 		    struct ad7091r_init_param init_param);
 

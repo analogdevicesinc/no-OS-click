@@ -33,7 +33,7 @@
 
 #include <stdlib.h>
 #include "ad7091r.h"
-#include "no_os_alloc.h"
+#include "capi_alloc.h"
 #include "no_os_error.h"
 
 /***************************************************************************//**
@@ -54,21 +54,29 @@ int8_t ad7091r_init(struct ad7091r_dev **device,
 		    struct ad7091r_init_param init_param)
 {
 	struct ad7091r_dev *dev;
-	uint8_t status = 0;
 	uint8_t tmp_val = 0xFF;
+	struct capi_spi_transfer xfer = {
+		.tx_buf = &tmp_val,
+		.rx_buf = &tmp_val,
+		.tx_size = 1,
+		.rx_size = 1,
+	};
 
-	dev = (struct ad7091r_dev *)no_os_malloc(sizeof(*dev));
+	if (!init_param.spi_dev)
+		return -EINVAL;
+
+	dev = (struct ad7091r_dev *)capi_malloc(sizeof(*dev));
 	if (!dev)
 		return -ENOMEM;
 
-	status = no_os_spi_init(&dev->spi_desc, &init_param.spi_init);
+	dev->spi_dev = init_param.spi_dev;
 	/* Ensures that last state of SDO is high. */
-	no_os_spi_write_and_read(dev->spi_desc, &tmp_val, 1);
+	capi_spi_transceive(dev->spi_dev, &xfer);
 	ad7091r_software_reset(dev);
 
 	*device = dev;
 
-	return status;
+	return 0;
 }
 
 /***************************************************************************//**
@@ -80,16 +88,13 @@ int8_t ad7091r_init(struct ad7091r_dev **device,
 *******************************************************************************/
 int32_t ad7091r_remove(struct ad7091r_dev *dev)
 {
-	int32_t ret;
-
 	if (!dev)
 		return -EINVAL;
 
-	ret = no_os_spi_remove(dev->spi_desc);
+	/* The SPI device and its controller belong to the caller. */
+	capi_free(dev);
 
-	no_os_free(dev);
-
-	return ret;
+	return 0;
 }
 
 /***************************************************************************//**
@@ -101,15 +106,21 @@ int32_t ad7091r_remove(struct ad7091r_dev *dev)
 void ad7091r_software_reset(struct ad7091r_dev *dev)
 {
 	uint8_t write_byte = 0xBF;
+	struct capi_spi_transfer xfer = {
+		.tx_buf = &write_byte,
+		.rx_buf = &write_byte,
+		.tx_size = 1,
+		.rx_size = 1,
+	};
 
 	/* Initiate a conversion. */
-	no_os_spi_write_and_read(dev->spi_desc, &write_byte, 1);
+	capi_spi_transceive(dev->spi_dev, &xfer);
 	/* Short cycle the read operation. */
 	write_byte = 0xFF;
-	no_os_spi_write_and_read(dev->spi_desc, &write_byte, 1);
+	capi_spi_transceive(dev->spi_dev, &xfer);
 	/* Perform another conversion in order to reset the device. */
 	write_byte = 0xBF;
-	no_os_spi_write_and_read(dev->spi_desc, &write_byte, 1);
+	capi_spi_transceive(dev->spi_dev, &xfer);
 }
 
 /***************************************************************************//**
@@ -126,11 +137,23 @@ uint16_t ad7091r_read_sample(struct ad7091r_dev *dev)
 	uint16_t conversion_result = 0;
 	uint8_t write_byte         = 0xBF;
 	uint8_t buffer[2]          = {0xFF, 0xFF};
+	struct capi_spi_transfer convst_xfer = {
+		.tx_buf = &write_byte,
+		.rx_buf = &write_byte,
+		.tx_size = 1,
+		.rx_size = 1,
+	};
+	struct capi_spi_transfer data_xfer = {
+		.tx_buf = buffer,
+		.rx_buf = buffer,
+		.tx_size = sizeof(buffer),
+		.rx_size = sizeof(buffer),
+	};
 
 	/* Initiate a conversion. */
-	no_os_spi_write_and_read(dev->spi_desc, &write_byte, 1);
+	capi_spi_transceive(dev->spi_dev, &convst_xfer);
 	/* Read conversion data. */
-	no_os_spi_write_and_read(dev->spi_desc, buffer, 2);
+	capi_spi_transceive(dev->spi_dev, &data_xfer);
 	conversion_result = (buffer[0] << 8) + buffer[1];
 	conversion_result >>= 4;
 
@@ -146,11 +169,23 @@ void ad7091r_power_down(struct ad7091r_dev *dev)
 {
 	uint8_t buffer[2]   = {0, 0};
 	uint8_t write_value = 0x00;
+	struct capi_spi_transfer convst_xfer = {
+		.tx_buf = &write_value,
+		.rx_buf = &write_value,
+		.tx_size = 1,
+		.rx_size = 1,
+	};
+	struct capi_spi_transfer data_xfer = {
+		.tx_buf = buffer,
+		.rx_buf = buffer,
+		.tx_size = sizeof(buffer),
+		.rx_size = sizeof(buffer),
+	};
 
 	/* Initiate a conversion. */
-	no_os_spi_write_and_read(dev->spi_desc, &write_value, 1);
+	capi_spi_transceive(dev->spi_dev, &convst_xfer);
 	/* Perform a dummy read. */
-	no_os_spi_write_and_read(dev->spi_desc, buffer, 2);
+	capi_spi_transceive(dev->spi_dev, &data_xfer);
 }
 
 /***************************************************************************//**
@@ -165,9 +200,15 @@ void ad7091r_power_down(struct ad7091r_dev *dev)
 void ad7091r_power_up(struct ad7091r_dev *dev)
 {
 	uint8_t write_value = 0xFF;
+	struct capi_spi_transfer xfer = {
+		.tx_buf = &write_value,
+		.rx_buf = &write_value,
+		.tx_size = 1,
+		.rx_size = 1,
+	};
 
 	/* Pull CONVST signal high. */
-	no_os_spi_write_and_read(dev->spi_desc, &write_value, 1);
+	capi_spi_transceive(dev->spi_dev, &xfer);
 }
 
 
