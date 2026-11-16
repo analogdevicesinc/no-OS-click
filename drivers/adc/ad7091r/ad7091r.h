@@ -60,7 +60,7 @@ int8_t ad7091r_init(struct ad7091r_dev **device,
 		    struct ad7091r_init_param init_param);
 
 /*! Free the resources allocated by ad7091r_init(). */
-int32_t ad5686_remove(struct ad7091r_dev *dev);
+int32_t ad7091r_remove(struct ad7091r_dev *dev);
 
 /*! Initiate a software reset of the device. */
 void ad7091r_software_reset(struct ad7091r_dev *dev);
