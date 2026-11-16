@@ -23,8 +23,8 @@
 #include "ad5593r.h"
 #include <stdio.h>
 
-/* SDO/ALT ADDRESS low: 0x53. With it high, use ADXL345_ADDRESS (0x1D). */
-#define ADXL345_CLICK_I2C_ADDR	0x53
+/* SDO/ALT ADDRESS low: 0x53; high: 0x1D. Probed in this order. */
+static const uint16_t adxl345_click_i2c_addr[] = { 0x53, ADXL345_ADDRESS };
 /* ASEL high: 0x1D. With it low, 0x53. */
 #define ADXL367_CLICK_I2C_ADDR	0x1D
 /* A1 = A0 = 0. */
@@ -66,7 +66,6 @@ int main(void)
 	struct capi_uart_handle *uart = NULL;
 	struct capi_i2c_controller_handle *i2c = NULL;
 	struct capi_i2c_device adxl345_i2c = {
-		.address = ADXL345_CLICK_I2C_ADDR,
 		.speed = CAPI_I2C_SPEED_STANDARD,
 	};
 	struct capi_i2c_device adxl367_i2c = {
@@ -111,6 +110,7 @@ int main(void)
 	uint16_t code;
 	struct adxl367_fractional_val x367, y367, z367;
 	float x, y, z;
+	unsigned int i;
 	int ret;
 
 	capi_platform_init();
@@ -132,33 +132,51 @@ int main(void)
 	adt7420_i2c.controller = i2c;
 	ad5593r_i2c.controller = i2c;
 
-	ret = adxl345_init(&adxl345, adxl345_param);
-	if (ret) {
+	/* Reading DEVID is all adxl345_init() does on the bus, so probing an
+	 * address that holds another part is harmless. */
+	for (i = 0; i < sizeof(adxl345_click_i2c_addr) /
+	     sizeof(adxl345_click_i2c_addr[0]); i++) {
+		adxl345_i2c.address = adxl345_click_i2c_addr[i];
+		ret = adxl345_init(&adxl345, adxl345_param);
+		if (!ret)
+			break;
 		printf("ADXL345 not found at 0x%02x (%d)\r\n",
-		       ADXL345_CLICK_I2C_ADDR, ret);
+		       adxl345_i2c.address, ret);
+		/* On an ID mismatch, adxl345_init() still sets the device. */
+		if (adxl345)
+			adxl345_remove(adxl345);
 		adxl345 = NULL;
-	} else {
+	}
+	if (adxl345) {
 		adxl345_set_range_resolution(adxl345, ADXL345_RANGE_PM_2G,
 					     ADXL345_FULL_RES);
 		adxl345_set_power_mode(adxl345, 1);
-		printf("ADXL345 found at 0x%02x\r\n", ADXL345_CLICK_I2C_ADDR);
+		printf("ADXL345 found at 0x%02x\r\n", adxl345_i2c.address);
 	}
 
-	ret = adxl367_init(&adxl367, adxl367_param);
-	if (ret) {
-		printf("ADXL367 not found at 0x%02x (%d)\r\n",
-		       ADXL367_CLICK_I2C_ADDR, ret);
-		adxl367 = NULL;
+	/* adxl367_init() starts with a soft reset, a write that an ADXL345
+	 * would take as an offset: skip the address if the ADXL345 has it. */
+	if (adxl345 && adxl345_i2c.address == ADXL367_CLICK_I2C_ADDR) {
+		printf("ADXL367 not probed: 0x%02x is the ADXL345\r\n",
+		       ADXL367_CLICK_I2C_ADDR);
 	} else {
-		ret = adxl367_set_range(adxl367, ADXL367_2G_RANGE);
-		if (!ret)
-			ret = adxl367_set_power_mode(adxl367, ADXL367_OP_MEASURE);
+		ret = adxl367_init(&adxl367, adxl367_param);
 		if (ret) {
-			printf("ADXL367 setup failed (%d)\r\n", ret);
+			printf("ADXL367 not found at 0x%02x (%d)\r\n",
+			       ADXL367_CLICK_I2C_ADDR, ret);
 			adxl367 = NULL;
 		} else {
-			printf("ADXL367 found at 0x%02x\r\n",
-			       ADXL367_CLICK_I2C_ADDR);
+			ret = adxl367_set_range(adxl367, ADXL367_2G_RANGE);
+			if (!ret)
+				ret = adxl367_set_power_mode(adxl367,
+							     ADXL367_OP_MEASURE);
+			if (ret) {
+				printf("ADXL367 setup failed (%d)\r\n", ret);
+				adxl367 = NULL;
+			} else {
+				printf("ADXL367 found at 0x%02x\r\n",
+				       ADXL367_CLICK_I2C_ADDR);
+			}
 		}
 	}
 

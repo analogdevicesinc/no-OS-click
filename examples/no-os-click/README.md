@@ -3,12 +3,12 @@
 A [CAPI](https://github.com/analogdevicesinc/capi) application for Click
 boards, built on the drivers in this repository.
 
-It probes an ADXL345 (I2C address 0x53), an ADXL367 (0x1D), an ADT7420 (0x48)
-and an AD5593R (0x10) on the Click socket I2C bus. For each one found, it prints
-a reading on the console UART once a second: acceleration from the ADXL345 in g
-and from the ADXL367 in m/s^2, and temperature from the ADT7420 and from the
-AD5593R's temperature indicator in degrees C. A device that is not found is
-skipped.
+It probes an ADXL345 (I2C address 0x53, else 0x1D), an ADXL367 (0x1D), an
+ADT7420 (0x48) and an AD5593R (0x10) on the Click socket I2C bus. For each one
+found, it prints a reading on the console UART once a second: acceleration from
+the ADXL345 in g and from the ADXL367 in m/s^2, and temperature from the ADT7420
+and from the AD5593R's temperature indicator in degrees C. A device that is not
+found is skipped.
 
 ## Build and flash
 
