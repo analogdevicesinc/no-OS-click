@@ -273,10 +273,14 @@ int main(void)
 				       ad5593r_code_to_celsius(code), code);
 		}
 		if (ad7091r) {
-			code = ad7091r_read_sample(ad7091r);
-			printf("AD7091R: v = %6.4f V (code %u)\r\n",
-			       ad7091r_convert_to_volts(code, AD7091R_CLICK_VREF),
-			       code);
+			ret = ad7091r_read_sample(ad7091r, &code);
+			if (ret)
+				printf("AD7091R: read failed (%d)\r\n", ret);
+			else
+				printf("AD7091R: v = %6.4f V (code %u)\r\n",
+				       ad7091r_convert_to_volts(code,
+								AD7091R_CLICK_VREF),
+				       code);
 		}
 		capi_wait_ms(1000);
 	}

@@ -45,11 +45,7 @@
  * @param init_param - The structure that contains the device initial
  * 		       parameters.
  *
- * @return ret - The result of the initialization procedure.
- *               Example: -1 - SPI peripheral was not initialized or the
- *                             device is not present.
- *                         0 - SPI peripheral was initialized and the
- *                             device is present.
+ * @return 0 in case of success, negative error code otherwise.
 *******************************************************************************/
 int8_t ad7091r_init(struct ad7091r_dev **device,
 		    struct ad7091r_init_param init_param)
@@ -76,21 +72,29 @@ int8_t ad7091r_init(struct ad7091r_dev **device,
 	if (dev->convst) {
 		/* CONVST idles high: normal mode, no conversion started. */
 		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
-		if (!ret)
-			ret = capi_gpio_pin_set_direction(dev->convst,
-							  CAPI_GPIO_OUTPUT);
-		if (ret) {
-			capi_free(dev);
-			return ret;
-		}
+		if (ret)
+			goto error;
+		ret = capi_gpio_pin_set_direction(dev->convst,
+						  CAPI_GPIO_OUTPUT);
+		if (ret)
+			goto error;
 	}
 	/* Ensures that last state of SDO is high. */
-	capi_spi_transceive(dev->spi_dev, &xfer);
-	ad7091r_software_reset(dev);
+	ret = capi_spi_transceive(dev->spi_dev, &xfer);
+	if (ret)
+		goto error;
+	ret = ad7091r_software_reset(dev);
+	if (ret)
+		goto error;
 
 	*device = dev;
 
 	return 0;
+
+error:
+	capi_free(dev);
+
+	return ret;
 }
 
 /***************************************************************************//**
@@ -116,8 +120,10 @@ int32_t ad7091r_remove(struct ad7091r_dev *dev)
  *        to initiate a software reset when power is first applied.
  *
  * @param dev     - The device structure.
+ *
+ * @return 0 in case of success, negative error code otherwise.
 *******************************************************************************/
-void ad7091r_software_reset(struct ad7091r_dev *dev)
+int32_t ad7091r_software_reset(struct ad7091r_dev *dev)
 {
 	uint8_t write_byte = 0xBF;
 	struct capi_spi_transfer xfer = {
@@ -126,27 +132,43 @@ void ad7091r_software_reset(struct ad7091r_dev *dev)
 		.tx_size = 1,
 		.rx_size = 1,
 	};
+	int ret;
 
 	/* Initiate a conversion. */
 	if (dev->convst) {
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		if (ret)
+			return ret;
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		if (ret)
+			return ret;
 		capi_wait_us(1);
 	} else {
-		capi_spi_transceive(dev->spi_dev, &xfer);
+		ret = capi_spi_transceive(dev->spi_dev, &xfer);
+		if (ret)
+			return ret;
 	}
 	/* Short cycle the read operation. */
 	write_byte = 0xFF;
-	capi_spi_transceive(dev->spi_dev, &xfer);
+	ret = capi_spi_transceive(dev->spi_dev, &xfer);
+	if (ret)
+		return ret;
 	/* Perform another conversion in order to reset the device. */
 	if (dev->convst) {
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		if (ret)
+			return ret;
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		if (ret)
+			return ret;
 		capi_wait_us(1);
-	} else {
-		write_byte = 0xBF;
-		capi_spi_transceive(dev->spi_dev, &xfer);
+
+		return 0;
 	}
+
+	write_byte = 0xBF;
+
+	return capi_spi_transceive(dev->spi_dev, &xfer);
 }
 
 /***************************************************************************//**
@@ -154,13 +176,13 @@ void ad7091r_software_reset(struct ad7091r_dev *dev)
  *        process the device runs in normal mode and operates without the busy
  *        indicator.
  *
- * @param dev     - The device structure.
+ * @param dev    - The device structure.
+ * @param sample - The 12-bit conversion result.
  *
- * @return conversionResult - 12bit conversion result.
+ * @return 0 in case of success, negative error code otherwise.
 *******************************************************************************/
-uint16_t ad7091r_read_sample(struct ad7091r_dev *dev)
+int32_t ad7091r_read_sample(struct ad7091r_dev *dev, uint16_t *sample)
 {
-	uint16_t conversion_result = 0;
 	uint8_t write_byte         = 0xBF;
 	uint8_t buffer[2]          = {0xFF, 0xFF};
 	struct capi_spi_transfer convst_xfer = {
@@ -175,30 +197,40 @@ uint16_t ad7091r_read_sample(struct ad7091r_dev *dev)
 		.tx_size = sizeof(buffer),
 		.rx_size = sizeof(buffer),
 	};
+	int ret;
 
 	/* Initiate a conversion. */
 	if (dev->convst) {
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		if (ret)
+			return ret;
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		if (ret)
+			return ret;
 		/* The conversion takes up to 650 ns. */
 		capi_wait_us(1);
 	} else {
-		capi_spi_transceive(dev->spi_dev, &convst_xfer);
+		ret = capi_spi_transceive(dev->spi_dev, &convst_xfer);
+		if (ret)
+			return ret;
 	}
 	/* Read conversion data. */
-	capi_spi_transceive(dev->spi_dev, &data_xfer);
-	conversion_result = (buffer[0] << 8) + buffer[1];
-	conversion_result >>= 4;
+	ret = capi_spi_transceive(dev->spi_dev, &data_xfer);
+	if (ret)
+		return ret;
+	*sample = ((buffer[0] << 8) + buffer[1]) >> 4;
 
-	return conversion_result;
+	return 0;
 }
 
 /***************************************************************************//**
  * @brief Puts the device in power-down mode.
  *
  * @param dev     - The device structure.
+ *
+ * @return 0 in case of success, negative error code otherwise.
 *******************************************************************************/
-void ad7091r_power_down(struct ad7091r_dev *dev)
+int32_t ad7091r_power_down(struct ad7091r_dev *dev)
 {
 	uint8_t buffer[2]   = {0, 0};
 	uint8_t write_value = 0x00;
@@ -214,16 +246,21 @@ void ad7091r_power_down(struct ad7091r_dev *dev)
 		.tx_size = sizeof(buffer),
 		.rx_size = sizeof(buffer),
 	};
+	int ret;
 
 	/* Initiate a conversion, with CONVST left low. */
 	if (dev->convst) {
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		if (ret)
+			return ret;
 		capi_wait_us(1);
 	} else {
-		capi_spi_transceive(dev->spi_dev, &convst_xfer);
+		ret = capi_spi_transceive(dev->spi_dev, &convst_xfer);
+		if (ret)
+			return ret;
 	}
 	/* Perform a dummy read. */
-	capi_spi_transceive(dev->spi_dev, &data_xfer);
+	return capi_spi_transceive(dev->spi_dev, &data_xfer);
 }
 
 /***************************************************************************//**
@@ -234,8 +271,10 @@ void ad7091r_power_down(struct ad7091r_dev *dev)
  *         - 100 us delay, when external reference is used.
  *
  * @param dev     - The device structure.
+ *
+ * @return 0 in case of success, negative error code otherwise.
 *******************************************************************************/
-void ad7091r_power_up(struct ad7091r_dev *dev)
+int32_t ad7091r_power_up(struct ad7091r_dev *dev)
 {
 	uint8_t write_value = 0xFF;
 	struct capi_spi_transfer xfer = {
@@ -247,9 +286,9 @@ void ad7091r_power_up(struct ad7091r_dev *dev)
 
 	/* Pull CONVST signal high. */
 	if (dev->convst)
-		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
-	else
-		capi_spi_transceive(dev->spi_dev, &xfer);
+		return capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+
+	return capi_spi_transceive(dev->spi_dev, &xfer);
 }
 
 

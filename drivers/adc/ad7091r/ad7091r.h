@@ -63,16 +63,16 @@ int8_t ad7091r_init(struct ad7091r_dev **device,
 int32_t ad7091r_remove(struct ad7091r_dev *dev);
 
 /*! Initiate a software reset of the device. */
-void ad7091r_software_reset(struct ad7091r_dev *dev);
+int32_t ad7091r_software_reset(struct ad7091r_dev *dev);
 
 /*! Initiates one conversion and reads back the result. */
-uint16_t ad7091r_read_sample(struct ad7091r_dev *dev);
+int32_t ad7091r_read_sample(struct ad7091r_dev *dev, uint16_t *sample);
 
 /*! Puts the device in power-down mode. */
-void ad7091r_power_down(struct ad7091r_dev *dev);
+int32_t ad7091r_power_down(struct ad7091r_dev *dev);
 
 /*! Powers up the device. */
-void ad7091r_power_up(struct ad7091r_dev *dev);
+int32_t ad7091r_power_up(struct ad7091r_dev *dev);
 
 /*! Converts a 12-bit raw sample to volts. */
 float ad7091r_convert_to_volts(uint16_t raw_sample, float v_ref);
