@@ -10,6 +10,11 @@ the ADXL345 in g and from the ADXL367 in m/s^2, and temperature from the ADT7420
 and from the AD5593R's temperature indicator in degrees C. A device that is not
 found is skipped.
 
+It also samples an AD7091R (ISO ADC 2 Click) on the Click socket SPI bus, with
+the socket CS as the controller's native chip-select and CONVST on the socket
+RST pin, and prints the input voltage against the 2.5 V internal reference. The
+AD7091R has no ID to read back, so it is always printed.
+
 ## Build and flash
 
 Set up CAPI and the platform first; see the
@@ -24,6 +29,7 @@ cmake --build <build dir> --target flash
 | Platform | Preset | Build dir |
 |---|---|---|
 | Alif | `dk-e8-rtss-hp`, `dk-e8-rtss-he` | `build-alif/rtss_hp`, `build-alif/rtss_he` |
+| Alif | `dk-b1-rtss-he` | `build-alif/dk-b1` |
 
 ## Adding a driver
 
@@ -34,6 +40,7 @@ Add the driver's path under `drivers/` to `NO_OS_CLICK_DRIVERS` in
 set(NO_OS_CLICK_DRIVERS
     accel/adxl345
     accel/adxl367
+    adc/ad7091r
     adc-dac/ad5592r
     temperature/adt7420
 )

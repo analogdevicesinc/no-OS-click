@@ -25,6 +25,16 @@
                 "BOARD": "dk-e8/rtss_he",
                 "TARGET": "dk-e8_rtss_he"
             }
+        },
+        {
+            "name": "dk-b1-rtss-he",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-alif/dk-b1",
+            "cacheVariables": {
+                "PLATFORM": "alif",
+                "BOARD": "dk-b1/rtss_he",
+                "TARGET": "dk-b1_rtss_he"
+            }
         }
     ]
 }

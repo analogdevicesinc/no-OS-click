@@ -32,6 +32,7 @@ get_filename_component(NO_OS_CLICK_DRIVERS_DIR
 set(NO_OS_CLICK_DRIVERS
     accel/adxl345
     accel/adxl367
+    adc/ad7091r
     adc-dac/ad5592r
     temperature/adt7420
 )

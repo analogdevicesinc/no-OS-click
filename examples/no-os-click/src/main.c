@@ -9,18 +9,21 @@
  *   @brief  Click board application for CAPI.
  *
  *   Probe an ADXL345, an ADXL367, an ADT7420 and an AD5593R on the Click
- *   socket I2C bus and print the reading of each one found on the console
- *   UART once a second.
+ *   socket I2C bus, and sample an AD7091R on the Click socket SPI bus.
+ *   Print the reading of each one found on the console UART once a second.
 *******************************************************************************/
 #include "capi_platform.h"
 #include "capi_time.h"
 #include "capi_uart.h"
 #include "capi_i2c.h"
+#include "capi_spi.h"
+#include "capi_gpio.h"
 #include "parameters.h"
 #include "adxl345.h"
 #include "adxl367.h"
 #include "adt7420.h"
 #include "ad5593r.h"
+#include "ad7091r.h"
 #include <stdio.h>
 
 /* SDO/ALT ADDRESS low: 0x53; high: 0x1D. Probed in this order. */
@@ -31,6 +34,10 @@ static const uint16_t adxl345_click_i2c_addr[] = { 0x53, ADXL345_ADDRESS };
 #define ADT7420_CLICK_I2C_ADDR	ADT7420_ADDRESS(0, 0)
 /* A0 low: 0x10. With it high, 0x11. */
 #define AD5593R_CLICK_I2C_ADDR	0x10
+/* The Click socket CS, the controller's SS0. */
+#define AD7091R_CLICK_SPI_CS	0x1
+/* The AD7091R internal reference, in volts. */
+#define AD7091R_CLICK_VREF	2.5f
 
 /**
  * @brief Convert an AD5593R temperature code to degrees Celsius.
@@ -65,6 +72,8 @@ int main(void)
 {
 	struct capi_uart_handle *uart = NULL;
 	struct capi_i2c_controller_handle *i2c = NULL;
+	struct capi_spi_controller_handle *spi = NULL;
+	struct capi_gpio_port_handle *ctl_port = NULL;
 	struct capi_i2c_device adxl345_i2c = {
 		.speed = CAPI_I2C_SPEED_STANDARD,
 	};
@@ -79,6 +88,11 @@ int main(void)
 	struct capi_i2c_device ad5593r_i2c = {
 		.address = AD5593R_CLICK_I2C_ADDR,
 		.speed = CAPI_I2C_SPEED_STANDARD,
+	};
+	struct capi_spi_device ad7091r_spi = {
+		.max_speed_hz = 1000000,
+		.mode = CAPI_SPI_MODE_0,
+		.native_cs = AD7091R_CLICK_SPI_CS,
 	};
 	struct adxl345_init_param adxl345_param = {
 		.i2c_dev = &adxl345_i2c,
@@ -103,10 +117,16 @@ int main(void)
 		.adc_range = ZERO_TO_VREF,
 		.dac_range = ZERO_TO_VREF,
 	};
+	struct ad7091r_init_param ad7091r_param = {
+		.spi_dev = &ad7091r_spi,
+		/* ISO ADC 2 Click: CONVST is on the socket RST pin. */
+		.convst = &bsp_click_rst,
+	};
 	struct adxl345_dev *adxl345 = NULL;
 	struct adxl367_dev *adxl367 = NULL;
 	struct adt7420_dev *adt7420 = NULL;
 	struct ad5592r_dev *ad5593r = NULL;
+	struct ad7091r_dev *ad7091r = NULL;
 	uint16_t code;
 	struct adxl367_fractional_val x367, y367, z367;
 	float x, y, z;
@@ -120,7 +140,7 @@ int main(void)
 	/* printf() reaches the console UART only after capi_stdio_init(). */
 	capi_stdio_init(uart);
 
-	printf("\r\n*** no-os-click: ADXL345 + ADXL367 + ADT7420 + AD5593R over I2C ***\r\n\r\n");
+	printf("\r\n*** no-os-click: ADXL345 + ADXL367 + ADT7420 + AD5593R over I2C, AD7091R over SPI ***\r\n\r\n");
 
 	ret = capi_i2c_init(&i2c, &bsp_i2c_cfg);
 	if (ret) {
@@ -198,7 +218,28 @@ int main(void)
 		printf("AD5593R found at 0x%02x\r\n", AD5593R_CLICK_I2C_ADDR);
 	}
 
-	if (!adxl345 && !adxl367 && !adt7420 && !ad5593r)
+	/* The AD7091R has no ID to read back, so it is only bound. */
+	ret = capi_gpio_port_init(&ctl_port, &bsp_click_ctl_port_cfg);
+	if (ret) {
+		printf("Click RST/INT GPIO port init failed (%d)\r\n", ret);
+	} else {
+		bsp_click_rst.port_handle = ctl_port;
+		ret = capi_spi_init(&spi, &bsp_spi_cfg);
+		if (ret)
+			printf("Click SPI init failed (%d)\r\n", ret);
+	}
+	if (!ret) {
+		ad7091r_spi.controller = spi;
+		ret = ad7091r_init(&ad7091r, ad7091r_param);
+		if (ret) {
+			printf("AD7091R init failed (%d)\r\n", ret);
+			ad7091r = NULL;
+		} else {
+			printf("AD7091R on the Click SPI\r\n");
+		}
+	}
+
+	if (!adxl345 && !adxl367 && !adt7420 && !ad5593r && !ad7091r)
 		goto halt;
 
 	printf("\r\n");
@@ -230,6 +271,12 @@ int main(void)
 			else
 				printf("AD5593R: t = %7.3f C (code %u)\r\n",
 				       ad5593r_code_to_celsius(code), code);
+		}
+		if (ad7091r) {
+			code = ad7091r_read_sample(ad7091r);
+			printf("AD7091R: v = %6.4f V (code %u)\r\n",
+			       ad7091r_convert_to_volts(code, AD7091R_CLICK_VREF),
+			       code);
 		}
 		capi_wait_ms(1000);
 	}
