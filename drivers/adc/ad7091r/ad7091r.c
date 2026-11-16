@@ -261,7 +261,7 @@ void ad7091r_power_up(struct ad7091r_dev *dev)
  *
  * @return voltage  - The result of the conversion expressed as volts.
 *******************************************************************************/
-float ad7091r_convert_to_volts(int16_t raw_sample, float v_ref)
+float ad7091r_convert_to_volts(uint16_t raw_sample, float v_ref)
 {
 	float voltage = 0;
 
