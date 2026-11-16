@@ -13,10 +13,12 @@ uses them.
 | `drivers/accel/adxl367` | ADXL367, ADXL366 | I2C, SPI | Accel 22 Click |
 | `drivers/temperature/adt7420` | ADT7420, ADT7410, ADT7422 (I2C); ADT7310, ADT7311, ADT7312, ADT7320 (SPI) | I2C, SPI | Surface Temp 2 Click |
 | `drivers/adc-dac/ad5592r` | AD5593R (I2C), AD5592R (SPI) | I2C, SPI | ADAC Click |
+| `drivers/adc/ad7091r` | AD7091R | SPI | ISO ADC 2 Click |
 
 The drivers use CAPI for the bus, delays and memory allocation, and keep the
-no-OS API otherwise. They are tested over I2C on an Alif DK-E8 (RTSS-HP). The
-SPI paths build but are not tested yet.
+no-OS API otherwise. The I2C drivers are tested on an Alif DK-E8 (RTSS-HP),
+and the AD7091R over SPI on an Alif DK-B1 (RTSS-HE). The SPI paths of the
+other drivers build but are not tested yet.
 
 The application owns the bus: it initializes the SPI or I2C controller and
 passes the driver a `capi_spi_device` or `capi_i2c_device`. The driver does
