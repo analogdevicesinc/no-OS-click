@@ -1,5 +1,5 @@
 /***************************************************************************//**
- *   @file   AD7091R.c
+ *   @file   ad7091r.c
  *   @brief  Implementation of AD7091R Driver.
  *   @author DNechita (Dan.Nechita@analog.com)
 ********************************************************************************
@@ -38,8 +38,8 @@
 #include "no_os_error.h"
 
 /***************************************************************************//**
- * @brief Initializes the communication peripheral and the initial Values for
- *        AD7092R Board.
+ * @brief Initializes the communication peripheral and the initial values for
+ *        the AD7091R.
  *
  * @param device     - The device structure.
  * @param init_param - The structure that contains the device initial
