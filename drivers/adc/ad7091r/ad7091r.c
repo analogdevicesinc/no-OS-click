@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include "ad7091r.h"
 #include "capi_alloc.h"
+#include "capi_time.h"
 #include "no_os_error.h"
 
 /***************************************************************************//**
@@ -55,6 +56,7 @@ int8_t ad7091r_init(struct ad7091r_dev **device,
 {
 	struct ad7091r_dev *dev;
 	uint8_t tmp_val = 0xFF;
+	int ret;
 	struct capi_spi_transfer xfer = {
 		.tx_buf = &tmp_val,
 		.rx_buf = &tmp_val,
@@ -70,6 +72,18 @@ int8_t ad7091r_init(struct ad7091r_dev **device,
 		return -ENOMEM;
 
 	dev->spi_dev = init_param.spi_dev;
+	dev->convst = init_param.convst;
+	if (dev->convst) {
+		/* CONVST idles high: normal mode, no conversion started. */
+		ret = capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		if (!ret)
+			ret = capi_gpio_pin_set_direction(dev->convst,
+							  CAPI_GPIO_OUTPUT);
+		if (ret) {
+			capi_free(dev);
+			return ret;
+		}
+	}
 	/* Ensures that last state of SDO is high. */
 	capi_spi_transceive(dev->spi_dev, &xfer);
 	ad7091r_software_reset(dev);
@@ -114,13 +128,25 @@ void ad7091r_software_reset(struct ad7091r_dev *dev)
 	};
 
 	/* Initiate a conversion. */
-	capi_spi_transceive(dev->spi_dev, &xfer);
+	if (dev->convst) {
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		capi_wait_us(1);
+	} else {
+		capi_spi_transceive(dev->spi_dev, &xfer);
+	}
 	/* Short cycle the read operation. */
 	write_byte = 0xFF;
 	capi_spi_transceive(dev->spi_dev, &xfer);
 	/* Perform another conversion in order to reset the device. */
-	write_byte = 0xBF;
-	capi_spi_transceive(dev->spi_dev, &xfer);
+	if (dev->convst) {
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		capi_wait_us(1);
+	} else {
+		write_byte = 0xBF;
+		capi_spi_transceive(dev->spi_dev, &xfer);
+	}
 }
 
 /***************************************************************************//**
@@ -151,7 +177,14 @@ uint16_t ad7091r_read_sample(struct ad7091r_dev *dev)
 	};
 
 	/* Initiate a conversion. */
-	capi_spi_transceive(dev->spi_dev, &convst_xfer);
+	if (dev->convst) {
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+		/* The conversion takes up to 650 ns. */
+		capi_wait_us(1);
+	} else {
+		capi_spi_transceive(dev->spi_dev, &convst_xfer);
+	}
 	/* Read conversion data. */
 	capi_spi_transceive(dev->spi_dev, &data_xfer);
 	conversion_result = (buffer[0] << 8) + buffer[1];
@@ -182,8 +215,13 @@ void ad7091r_power_down(struct ad7091r_dev *dev)
 		.rx_size = sizeof(buffer),
 	};
 
-	/* Initiate a conversion. */
-	capi_spi_transceive(dev->spi_dev, &convst_xfer);
+	/* Initiate a conversion, with CONVST left low. */
+	if (dev->convst) {
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_LOW);
+		capi_wait_us(1);
+	} else {
+		capi_spi_transceive(dev->spi_dev, &convst_xfer);
+	}
 	/* Perform a dummy read. */
 	capi_spi_transceive(dev->spi_dev, &data_xfer);
 }
@@ -208,7 +246,10 @@ void ad7091r_power_up(struct ad7091r_dev *dev)
 	};
 
 	/* Pull CONVST signal high. */
-	capi_spi_transceive(dev->spi_dev, &xfer);
+	if (dev->convst)
+		capi_gpio_pin_set_raw_value(dev->convst, CAPI_GPIO_HIGH);
+	else
+		capi_spi_transceive(dev->spi_dev, &xfer);
 }
 
 

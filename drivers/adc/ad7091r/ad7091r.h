@@ -36,16 +36,23 @@
 
 #include <stdint.h>
 #include "capi_spi.h"
+#include "capi_gpio.h"
 
 struct ad7091r_dev {
 	/* SPI device, owned by the caller */
 	struct capi_spi_device	*spi_dev;
+	/* CONVST GPIO, owned by the caller; NULL if CONVST is on SDI */
+	struct capi_gpio_pin	*convst;
 };
 
 struct ad7091r_init_param {
 	/* SPI device. Its controller must already be initialized, and it must
 	 * outlive the AD7091R descriptor. */
 	struct capi_spi_device	*spi_dev;
+	/* CONVST GPIO, optional. Its port must already be initialized, and it
+	 * must outlive the AD7091R descriptor. If NULL, CONVST is driven
+	 * through SDI (MOSI), wired to CONVST. */
+	struct capi_gpio_pin	*convst;
 };
 
 /*! Binds the SPI device and resets the AD7091R. */
