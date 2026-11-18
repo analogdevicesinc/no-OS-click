@@ -31,6 +31,7 @@ cmake --build <build dir> --target flash
 |---|---|---|
 | Alif | `dk-e8-rtss-hp`, `dk-e8-rtss-he` | `build-alif/rtss_hp`, `build-alif/rtss_he` |
 | Alif | `dk-b1-rtss-he` | `build-alif/dk-b1` |
+| Alif | `dk-e1c-rtss-he` | `build-alif/dk-e1c` |
 
 ## Adding a driver
 
