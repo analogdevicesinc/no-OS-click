@@ -13,7 +13,8 @@ found is skipped.
 It also samples an AD7091R (ISO ADC 2 Click) on the Click socket SPI bus, with
 the socket CS as the controller's native chip-select and CONVST on the socket
 RST pin, and prints the input voltage against the 2.5 V internal reference. The
-AD7091R has no ID to read back, so it is always printed.
+AD7091R has no ID to read back, so the application asks on the console whether
+the Click is on the socket; press `y` if it is.
 
 ## Build and flash
 

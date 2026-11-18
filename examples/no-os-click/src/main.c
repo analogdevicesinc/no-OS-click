@@ -9,7 +9,8 @@
  *   @brief  Click board application for CAPI.
  *
  *   Probe an ADXL345, an ADXL367, an ADT7420 and an AD5593R on the Click
- *   socket I2C bus, and sample an AD7091R on the Click socket SPI bus.
+ *   socket I2C bus, and, if the user says it is there, sample an AD7091R on
+ *   the Click socket SPI bus.
  *   Print the reading of each one found on the console UART once a second.
 *******************************************************************************/
 #include "capi_platform.h"
@@ -131,6 +132,7 @@ int main(void)
 	struct adxl367_fractional_val x367, y367, z367;
 	float x, y, z;
 	unsigned int i;
+	uint8_t key;
 	int ret;
 
 	capi_platform_init();
@@ -218,24 +220,31 @@ int main(void)
 		printf("AD5593R found at 0x%02x\r\n", AD5593R_CLICK_I2C_ADDR);
 	}
 
-	/* The AD7091R has no ID to read back, so it is only bound. */
-	ret = capi_gpio_port_init(&ctl_port, &bsp_click_ctl_port_cfg);
-	if (ret) {
-		printf("Click RST/INT GPIO port init failed (%d)\r\n", ret);
-	} else {
-		bsp_click_rst.port_handle = ctl_port;
-		ret = capi_spi_init(&spi, &bsp_spi_cfg);
-		if (ret)
-			printf("Click SPI init failed (%d)\r\n", ret);
-	}
-	if (!ret) {
-		ad7091r_spi.controller = spi;
-		ret = ad7091r_init(&ad7091r, ad7091r_param);
+	/* The AD7091R has no ID to read back, so ask whether it is there. */
+	printf("AD7091R connected? [y/N] ");
+	fflush(stdout);
+	if (capi_uart_receive(uart, &key, 1))
+		key = 0;
+	printf("\r\n");
+	if (key == 'y' || key == 'Y') {
+		ret = capi_gpio_port_init(&ctl_port, &bsp_click_ctl_port_cfg);
 		if (ret) {
-			printf("AD7091R init failed (%d)\r\n", ret);
-			ad7091r = NULL;
+			printf("Click RST/INT GPIO port init failed (%d)\r\n", ret);
 		} else {
-			printf("AD7091R on the Click SPI\r\n");
+			bsp_click_rst.port_handle = ctl_port;
+			ret = capi_spi_init(&spi, &bsp_spi_cfg);
+			if (ret)
+				printf("Click SPI init failed (%d)\r\n", ret);
+		}
+		if (!ret) {
+			ad7091r_spi.controller = spi;
+			ret = ad7091r_init(&ad7091r, ad7091r_param);
+			if (ret) {
+				printf("AD7091R init failed (%d)\r\n", ret);
+				ad7091r = NULL;
+			} else {
+				printf("AD7091R on the Click SPI\r\n");
+			}
 		}
 	}
 
