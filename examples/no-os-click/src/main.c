@@ -8,9 +8,10 @@
  *   @file   main.c
  *   @brief  Click board application for CAPI.
  *
- *   Probe an ADXL345, an ADXL367, an ADT7420 and an AD5593R on the Click
- *   socket I2C bus, and, if the user says it is there, sample an AD7091R on
- *   the Click socket SPI bus.
+ *   Probe an ADXL345, an ADT7420 and an AD5593R on the Click socket I2C
+ *   bus, and an ADXL367 on the I2C bus, else on the SPI bus. If no ADXL367
+ *   is on the SPI bus and the user says it is there, sample an AD7091R on
+ *   the SPI bus.
  *   Print the reading of each one found on the console UART once a second.
 *******************************************************************************/
 #include "capi_platform.h"
@@ -36,7 +37,7 @@ static const uint16_t adxl345_click_i2c_addr[] = { 0x53, ADXL345_ADDRESS };
 /* A0 low: 0x10. With it high, 0x11. */
 #define AD5593R_CLICK_I2C_ADDR	0x10
 /* The Click socket CS, the controller's SS0. */
-#define AD7091R_CLICK_SPI_CS	0x1
+#define CLICK_SPI_CS		0x1
 /* The AD7091R internal reference, in volts. */
 #define AD7091R_CLICK_VREF	2.5f
 
@@ -90,10 +91,15 @@ int main(void)
 		.address = AD5593R_CLICK_I2C_ADDR,
 		.speed = CAPI_I2C_SPEED_STANDARD,
 	};
+	struct capi_spi_device adxl367_spi = {
+		.max_speed_hz = 1000000,
+		.mode = CAPI_SPI_MODE_0,
+		.native_cs = CLICK_SPI_CS,
+	};
 	struct capi_spi_device ad7091r_spi = {
 		.max_speed_hz = 1000000,
 		.mode = CAPI_SPI_MODE_0,
-		.native_cs = AD7091R_CLICK_SPI_CS,
+		.native_cs = CLICK_SPI_CS,
 	};
 	struct adxl345_init_param adxl345_param = {
 		.i2c_dev = &adxl345_i2c,
@@ -102,6 +108,7 @@ int main(void)
 	};
 	struct adxl367_init_param adxl367_param = {
 		.i2c_dev = &adxl367_i2c,
+		.spi_dev = &adxl367_spi,
 		.id = ADXL367_ID,
 		.comm_type = ADXL367_I2C_COMM,
 	};
@@ -142,7 +149,7 @@ int main(void)
 	/* printf() reaches the console UART only after capi_stdio_init(). */
 	capi_stdio_init(uart);
 
-	printf("\r\n*** no-os-click: ADXL345 + ADXL367 + ADT7420 + AD5593R over I2C, AD7091R over SPI ***\r\n\r\n");
+	printf("\r\n*** no-os-click: ADXL345 + ADT7420 + AD5593R over I2C, ADXL367 over I2C or SPI, AD7091R over SPI ***\r\n\r\n");
 
 	ret = capi_i2c_init(&i2c, &bsp_i2c_cfg);
 	if (ret) {
@@ -153,6 +160,14 @@ int main(void)
 	adxl367_i2c.controller = i2c;
 	adt7420_i2c.controller = i2c;
 	ad5593r_i2c.controller = i2c;
+
+	ret = capi_spi_init(&spi, &bsp_spi_cfg);
+	if (ret) {
+		printf("Click SPI init failed (%d)\r\n", ret);
+		spi = NULL;
+	}
+	adxl367_spi.controller = spi;
+	ad7091r_spi.controller = spi;
 
 	/* Reading DEVID is all adxl345_init() does on the bus, so probing an
 	 * address that holds another part is harmless. */
@@ -188,17 +203,27 @@ int main(void)
 			       ADXL367_CLICK_I2C_ADDR, ret);
 			adxl367 = NULL;
 		} else {
-			ret = adxl367_set_range(adxl367, ADXL367_2G_RANGE);
-			if (!ret)
-				ret = adxl367_set_power_mode(adxl367,
-							     ADXL367_OP_MEASURE);
-			if (ret) {
-				printf("ADXL367 setup failed (%d)\r\n", ret);
-				adxl367 = NULL;
-			} else {
-				printf("ADXL367 found at 0x%02x\r\n",
-				       ADXL367_CLICK_I2C_ADDR);
-			}
+			printf("ADXL367 found at 0x%02x\r\n",
+			       ADXL367_CLICK_I2C_ADDR);
+		}
+	}
+	if (!adxl367 && spi) {
+		adxl367_param.comm_type = ADXL367_SPI_COMM;
+		ret = adxl367_init(&adxl367, adxl367_param);
+		if (ret) {
+			printf("ADXL367 not found on the Click SPI (%d)\r\n", ret);
+			adxl367 = NULL;
+		} else {
+			printf("ADXL367 found on the Click SPI\r\n");
+		}
+	}
+	if (adxl367) {
+		ret = adxl367_set_range(adxl367, ADXL367_2G_RANGE);
+		if (!ret)
+			ret = adxl367_set_power_mode(adxl367, ADXL367_OP_MEASURE);
+		if (ret) {
+			printf("ADXL367 setup failed (%d)\r\n", ret);
+			adxl367 = NULL;
 		}
 	}
 
@@ -220,24 +245,22 @@ int main(void)
 		printf("AD5593R found at 0x%02x\r\n", AD5593R_CLICK_I2C_ADDR);
 	}
 
-	/* The AD7091R has no ID to read back, so ask whether it is there. */
-	printf("AD7091R connected? [y/N] ");
-	fflush(stdout);
-	if (capi_uart_receive(uart, &key, 1))
-		key = 0;
-	printf("\r\n");
+	/* The AD7091R has no ID to read back, so ask whether it is there,
+	 * unless the ADXL367 has the socket SPI CS. */
+	key = 0;
+	if (spi && !(adxl367 && adxl367_param.comm_type == ADXL367_SPI_COMM)) {
+		printf("AD7091R connected? [y/N] ");
+		fflush(stdout);
+		if (capi_uart_receive(uart, &key, 1))
+			key = 0;
+		printf("\r\n");
+	}
 	if (key == 'y' || key == 'Y') {
 		ret = capi_gpio_port_init(&ctl_port, &bsp_click_ctl_port_cfg);
 		if (ret) {
 			printf("Click RST/INT GPIO port init failed (%d)\r\n", ret);
 		} else {
 			bsp_click_rst.port_handle = ctl_port;
-			ret = capi_spi_init(&spi, &bsp_spi_cfg);
-			if (ret)
-				printf("Click SPI init failed (%d)\r\n", ret);
-		}
-		if (!ret) {
-			ad7091r_spi.controller = spi;
 			ret = ad7091r_init(&ad7091r, ad7091r_param);
 			if (ret) {
 				printf("AD7091R init failed (%d)\r\n", ret);
