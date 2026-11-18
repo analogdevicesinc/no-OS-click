@@ -17,8 +17,9 @@ uses them.
 
 The drivers use CAPI for the bus, delays and memory allocation, and keep the
 no-OS API otherwise. The I2C drivers are tested on an Alif DK-E8 (RTSS-HP),
-and the AD7091R over SPI on an Alif DK-B1 (RTSS-HE). The SPI paths of the
-other drivers build but are not tested yet.
+the ADT7420 also on an Alif DK-B1 (RTSS-HE), the AD7091R over SPI on the
+DK-B1, and the ADXL367 over SPI on an Alif DK-E1C (RTSS-HE). The SPI paths of
+the other drivers build but are not tested yet.
 
 The application owns the bus: it initializes the SPI or I2C controller and
 passes the driver a `capi_spi_device` or `capi_i2c_device`. The driver does
