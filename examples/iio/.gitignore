@@ -1,0 +1,21 @@
+build/
+build-*/
+capi.lock.yml
+*.o
+*.d
+*.a
+*.elf
+*.hex
+*.bin
+*.map
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

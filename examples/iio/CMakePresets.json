@@ -1,0 +1,50 @@
+{
+    "version": 7,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 27,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "dk-e8-rtss-hp",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-alif/rtss_hp",
+            "cacheVariables": {
+                "PLATFORM": "alif",
+                "BOARD": "dk-e8/rtss_hp",
+                "TARGET": "dk-e8_rtss_hp"
+            }
+        },
+        {
+            "name": "dk-e8-rtss-he",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-alif/rtss_he",
+            "cacheVariables": {
+                "PLATFORM": "alif",
+                "BOARD": "dk-e8/rtss_he",
+                "TARGET": "dk-e8_rtss_he"
+            }
+        },
+        {
+            "name": "dk-b1-rtss-he",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-alif/dk-b1",
+            "cacheVariables": {
+                "PLATFORM": "alif",
+                "BOARD": "dk-b1/rtss_he",
+                "TARGET": "dk-b1_rtss_he"
+            }
+        },
+        {
+            "name": "dk-e1c-rtss-he",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-alif/dk-e1c",
+            "cacheVariables": {
+                "PLATFORM": "alif",
+                "BOARD": "dk-e1c/rtss_he",
+                "TARGET": "dk-e1c_rtss_he"
+            }
+        }
+    ]
+}
